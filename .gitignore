@@ -16,6 +16,7 @@ build/
 
 # Data / Models (too large for git — use DVC or S3)
 data/raw/
+data/external/
 models/*.pkl
 models/*.joblib
 

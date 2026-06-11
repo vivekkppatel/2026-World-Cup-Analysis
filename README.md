@@ -95,6 +95,8 @@ worldcup2026/
 
 - **[football-data.org](https://www.football-data.org/)** — Live match results, standings, scorers for WC 2026 (free tier, 10 req/min)
 - **[StatsBomb Open Data](https://github.com/statsbomb/open-data)** — Event-level data (shots, passes, pressures) for WC 2018 and 2022
+- **[openfootball/worldcup.json](https://github.com/openfootball/worldcup.json)** — All 104 WC 2026 fixtures, groups, and venues; public domain (CC0), no API key. Fallback/bootstrap source (`python -c` via `data/ingest/openfootball_loader.py`)
+- **[Fjelstul World Cup Database](https://github.com/jfjelstul/worldcup)** — Full 1930–2022 match history for team-strength priors and historical EDA (`python scripts/fetch_external_data.py`). © Joshua C. Fjelstul, Ph.D., CC-BY-SA 4.0
 
 ## Resume Bullet Points
 
