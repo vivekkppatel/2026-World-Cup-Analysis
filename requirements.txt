@@ -1,0 +1,31 @@
+# Pinned as >= floors — exact pins predated Python 3.14, which needs newer wheels
+# (numpy 1.26.x / pandas 2.2.2 / psycopg2 2.9.9 have no cp314 builds).
+
+# Core
+streamlit>=1.40
+pandas>=2.3
+numpy>=2.1
+
+# Visualization
+plotly>=5.24
+
+# Database
+sqlalchemy>=2.0.36
+psycopg2-binary>=2.9.10
+alembic>=1.14
+
+# HTTP / Data Sources
+requests>=2.32
+statsbombpy>=1.13.0
+
+# ML
+scikit-learn>=1.7
+joblib>=1.4
+
+# Utilities
+python-dotenv>=1.0
+tqdm>=4.66
+
+# Dev / Testing
+pytest>=8.3
+black>=24.10

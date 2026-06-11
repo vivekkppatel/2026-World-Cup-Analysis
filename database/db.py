@@ -1,0 +1,79 @@
+"""
+database/db.py
+──────────────
+SQLAlchemy engine, session factory, and helper utilities.
+All other modules import `get_session` and `engine` from here.
+"""
+import os
+from contextlib import contextmanager
+
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
+
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/worldcup2026")
+
+# ── Engine ────────────────────────────────────────────────────────────────────
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=5,
+    max_overflow=10,
+    pool_pre_ping=True,       # recycle stale connections
+    echo=False,
+)
+
+# ── Session Factory ───────────────────────────────────────────────────────────
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+# ── Context manager for safe session handling ─────────────────────────────────
+@contextmanager
+def get_session():
+    """
+    Usage:
+        with get_session() as session:
+            results = session.execute(text("SELECT 1")).fetchall()
+    """
+    session = SessionLocal()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+# ── Schema initialization ─────────────────────────────────────────────────────
+def init_db():
+    """Create all tables from schema.sql if they don't exist."""
+    schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
+    with open(schema_path, "r") as f:
+        sql = f.read()
+    with engine.connect() as conn:
+        conn.execute(text(sql))
+        conn.commit()
+    print("✅ Database schema initialized.")
+
+
+def health_check() -> bool:
+    """Returns True if the database connection is healthy."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True
+    except Exception as e:
+        print(f"❌ DB health check failed: {e}")
+        return False
+
+
+if __name__ == "__main__":
+    if health_check():
+        init_db()
