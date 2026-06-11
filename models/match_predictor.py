@@ -82,8 +82,10 @@ class MatchPredictor:
             "goals_for_away":  merged["goals_for_away"],
             "goals_ag_home":   merged["goals_against_home"],
             "goals_ag_away":   merged["goals_against_away"],
+            # Stage strings differ by source: StatsBomb "Group Stage" vs
+            # football-data.org "GROUP_STAGE". Empty/unknown counts as group.
             "is_knockout":     merged["stage_home"].apply(
-                lambda s: 1 if s not in ("GROUP_STAGE", "") else 0
+                lambda s: 0 if (not s or "group" in str(s).lower()) else 1
             ),
         })
 

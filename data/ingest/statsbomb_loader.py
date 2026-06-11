@@ -155,6 +155,11 @@ class StatsBombLoader:
         if events.empty:
             return None
 
+        # Exclude penalty shootouts (period 5): those Shot events inflate
+        # goals/xG/shots and don't count in official match stats.
+        if "period" in events.columns:
+            events = events[events["period"] <= 4]
+
         stats_rows = []
 
         # Get unique players in this match
@@ -218,6 +223,9 @@ class StatsBombLoader:
         for _, match in matches.iterrows():
             try:
                 events = cls.get_events_for_match(match["match_id"])
+                # Exclude penalty shootouts (period 5) — see _aggregate_player_match
+                if "period" in events.columns:
+                    events = events[events["period"] <= 4]
                 for team in [match["home_team"], match["away_team"]]:
                     te = events[events["team"] == team]
                     is_home = (team == match["home_team"])
@@ -234,7 +242,7 @@ class StatsBombLoader:
                         "shots":           int((te["type"] == "Shot").sum()),
                         "passes":          int((te["type"] == "Pass").sum()),
                         "pressures":       int((te["type"] == "Pressure").sum()),
-                        "stage":           match.get("competition_stage", {}).get("name", ""),
+                        "stage":           match.get("competition_stage", "") or "",
                     })
             except Exception as e:
                 logger.warning(f"Skipping match {match['match_id']}: {e}")
