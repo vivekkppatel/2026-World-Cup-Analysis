@@ -26,7 +26,10 @@ from sqlalchemy import text
 
 from database.db import engine
 
+from app.utils.theme import inject_theme
+
 st.set_page_config(page_title="Bracket · WC 2026", page_icon="🏆", layout="wide")
+inject_theme()
 
 BG, TEXT, PRIMARY, ACCENT = "#0F0F23", "#FAFAFA", "#00A86B", "#E8C547"
 GOLD, MUTED = "#E8C547", "#6C6C8A"

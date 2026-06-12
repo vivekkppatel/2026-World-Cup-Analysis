@@ -17,9 +17,11 @@ import pandas as pd
 import streamlit as st
 
 from app.utils.charts import player_radar
+from app.utils.theme import inject_theme
 from database.db import engine
 
 st.set_page_config(page_title="Player Stats · WC 2026", page_icon="👤", layout="wide")
+inject_theme()
 st.title("👤 Player Stats")
 st.caption("Per-90 leaderboards · percentile radars · six international tournaments")
 

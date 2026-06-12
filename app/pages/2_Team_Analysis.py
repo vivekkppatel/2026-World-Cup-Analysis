@@ -18,9 +18,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from app.utils.theme import inject_theme
 from database.db import engine
 
 st.set_page_config(page_title="Team Analysis · WC 2026", page_icon="🔵", layout="wide")
+inject_theme()
 st.title("🔵 Team Analysis")
 st.caption("Event-level team performance across WC, Euro, Copa & AFCON tournaments")
 

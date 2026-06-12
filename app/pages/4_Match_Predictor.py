@@ -24,7 +24,10 @@ from database.db import engine
 from models.elo import build_from_history
 from models.match_predictor import MatchPredictor, MODEL_PATH
 
+from app.utils.theme import inject_theme
+
 st.set_page_config(page_title="Match Predictor · WC 2026", page_icon="🔮", layout="wide")
+inject_theme()
 st.title("🔮 Match Predictor")
 st.caption("Leakage-free logistic regression · features: Elo, FIFA rank, recent form")
 

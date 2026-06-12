@@ -18,9 +18,11 @@ import pandas as pd
 import streamlit as st
 
 from app.utils.charts import standings_bar, top_scorers_bar
+from app.utils.theme import inject_theme
 from database.db import engine
 
 st.set_page_config(page_title="Tournament Overview · WC 2026", page_icon="🌍", layout="wide")
+inject_theme()
 st.title("🌍 Tournament Overview")
 st.caption("Group stage standings, scorers & fixtures · computed from the database")
 

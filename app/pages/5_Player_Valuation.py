@@ -18,7 +18,10 @@ from data.ingest.statsbomb_loader import StatsBombLoader, COMPETITIONS
 from models.player_rating import compute_player_ratings, get_undervalued_players
 from app.utils.charts import cpcs_scatter, player_radar
 
+from app.utils.theme import inject_theme
+
 st.set_page_config(page_title="Player Valuation · WC 2026", page_icon="💰", layout="wide")
+inject_theme()
 st.title("💰 Player Valuation")
 st.subheader("Composite Player Contribution Score (CPCS)")
 st.caption(
