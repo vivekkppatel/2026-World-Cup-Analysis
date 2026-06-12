@@ -11,6 +11,7 @@ A real-time player performance and match analytics dashboard built during the 20
 | 👤 Player Stats | Per-90 leaderboards, radar comparisons |
 | 🔮 Match Predictor | Win probability model trained on WC 2014–2022 |
 | 💰 Player Valuation | Contribution scoring — finding undervalued players |
+| 🏆 Bracket | Predicted (Elo + Monte Carlo) vs. reality, with model KPIs |
 
 ## Tech Stack
 
@@ -64,7 +65,14 @@ python scripts/apply_views.py             # analytical views for Tableau / Power
 
 Re-run `refresh_live.py` any time to pull the latest scores. Connect Tableau or Power BI to the `v_*` views — guide in [docs/BI_SETUP.md](docs/BI_SETUP.md).
 
-### 7. Run the dashboard
+### 7. Simulate the bracket
+```bash
+python scripts/run_bracket_sim.py --sims 10000
+```
+
+Builds team strength from 92 years of World Cup Elo blended with current FIFA ranks, then runs a 10,000-tournament Monte Carlo to produce advancement probabilities and a predicted bracket. Results feed the 🏆 Bracket page and the `v_bracket_predictions` / `v_model_scorecard` views — the scorecard (Brier score, hit rate) grades the model against reality as matches finish.
+
+### 8. Run the dashboard
 ```bash
 streamlit run app/main.py
 ```

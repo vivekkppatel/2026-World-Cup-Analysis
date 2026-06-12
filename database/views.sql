@@ -13,7 +13,8 @@
 DROP VIEW IF EXISTS v_top_scorers CASCADE;
 DROP VIEW IF EXISTS v_group_standings, v_match_results, v_upcoming_fixtures,
                     v_player_stats, v_team_match_stats, v_player_form_2026,
-                    v_predictions_vs_results CASCADE;
+                    v_predictions_vs_results, v_bracket_predictions,
+                    v_model_scorecard CASCADE;
 
 -- ── 1. Group standings, computed live from match results ─────
 -- Derived from the matches table rather than read from the
@@ -230,3 +231,49 @@ FROM predictions pr
 JOIN matches m  ON m.id = pr.match_id
 LEFT JOIN teams th ON th.id = m.home_team_id
 LEFT JOIN teams ta ON ta.id = m.away_team_id;
+
+-- ── 9. Team advancement probabilities (Monte Carlo bracket) ───
+-- Populated by scripts/run_bracket_sim.py. One row per WC 2026 team
+-- with its simulated probability of reaching each knockout round.
+CREATE OR REPLACE VIEW v_bracket_predictions AS
+SELECT
+    a.team_name        AS team,
+    t.group_name,
+    t.fifa_ranking     AS fifa_rank,
+    a.strength,
+    a.reached_r32,
+    a.reached_r16,
+    a.reached_qf,
+    a.reached_sf,
+    a.reached_final,
+    a.won_cup,
+    a.model_version
+FROM team_advancement a
+LEFT JOIN teams t ON t.id = a.team_id
+ORDER BY a.won_cup DESC;
+
+-- ── 10. Model scorecard — accuracy KPIs as results land ───────
+-- The headline KPI feed: per-match Brier score and hit/miss for every
+-- finished, predicted match. Aggregate in BI for overall Brier, hit
+-- rate, and round-by-round skill. Brier = mean squared error between
+-- the predicted-winner probability and the realised 0/1 outcome.
+CREATE OR REPLACE VIEW v_model_scorecard AS
+SELECT
+    m.fifa_match_num,
+    m.tournament_label,
+    m.stage,
+    th.name AS home_team,
+    ta.name AS away_team,
+    pr.predicted_winner,
+    m.winner AS actual_winner,
+    GREATEST(pr.home_win_prob, pr.away_win_prob) AS predicted_confidence,
+    (pr.predicted_winner = m.winner)             AS hit,
+    -- Brier for the binary "did the predicted side win?" event
+    POWER(GREATEST(pr.home_win_prob, pr.away_win_prob)
+          - (pr.predicted_winner = m.winner)::int, 2) AS brier,
+    pr.model_version
+FROM predictions pr
+JOIN matches m ON m.id = pr.match_id
+LEFT JOIN teams th ON th.id = m.home_team_id
+LEFT JOIN teams ta ON ta.id = m.away_team_id
+WHERE m.status = 'FINISHED' AND m.winner IS NOT NULL;
