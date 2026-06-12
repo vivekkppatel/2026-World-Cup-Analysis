@@ -162,7 +162,32 @@ st.divider()
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# 3. Predicted vs. reality bracket
+# 3. Knockout bracket tree — Expected vs Actual, self-updating
+# ════════════════════════════════════════════════════════════════════════════
+from app.utils.bracket_view import render_bracket_svg  # noqa: E402
+
+st.subheader("🗺️ Knockout bracket")
+st.caption("Left: the model's expected path. Right: how it's actually playing out. "
+           "Auto-refreshes every 60 seconds as results land.")
+
+
+@st.fragment(run_every=60)
+def bracket_tree():
+    exp_tab, act_tab = st.tabs(["🔮 Expected (model)", "⚽ Actual (live)"])
+    with exp_tab:
+        st.markdown(render_bracket_svg("expected"), unsafe_allow_html=True)
+    with act_tab:
+        st.markdown(render_bracket_svg("actual"), unsafe_allow_html=True)
+        st.caption("Empty slots show qualification codes (e.g. 2A = Group A runner-up, "
+                   "W73 = winner of match 73) until teams resolve.")
+
+
+bracket_tree()
+st.divider()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 4. Predicted vs. reality — match cards
 # ════════════════════════════════════════════════════════════════════════════
 st.subheader("🆚 Predicted bracket vs. reality")
 
