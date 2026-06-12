@@ -21,15 +21,20 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# ── Position groups ───────────────────────────────────────────────────────────
-GOALKEEPER = {"GK", "Goalkeeper"}
-DEFENDERS  = {"CB", "LB", "RB", "LWB", "RWB", "Centre-Back",
-               "Left Back", "Right Back", "Left Wing Back", "Right Wing Back"}
-MIDFIELDERS = {"CM", "CDM", "CAM", "DM", "AM", "LM", "RM",
-                "Central Midfield", "Defensive Midfield",
-                "Attacking Midfield", "Left Midfield", "Right Midfield"}
-FORWARDS    = {"ST", "CF", "LW", "RW", "SS", "Centre Forward",
-                "Left Wing", "Right Wing", "Second Striker"}
+# ── Position classification ───────────────────────────────────────────────────
+# StatsBomb's event `position` field uses verbose strings — "Center Back",
+# "Left Center Back", "Center Defensive Midfield", "Left Wing Back", … (24
+# variants), NOT abbreviations or British spellings. Keyword matching is far
+# more robust than exact-set membership: an earlier version matched
+# "Centre-Back"/"Central Midfield", so almost every defender and midfielder
+# fell through to the FWD default and was scored with forward weights.
+_POSITION_ABBREV = {
+    "gk": "GK",
+    "cb": "DEF", "lb": "DEF", "rb": "DEF", "lwb": "DEF", "rwb": "DEF",
+    "cm": "MID", "cdm": "MID", "cam": "MID", "dm": "MID", "am": "MID",
+    "lm": "MID", "rm": "MID",
+    "st": "FWD", "cf": "FWD", "lw": "FWD", "rw": "FWD", "ss": "FWD",
+}
 
 
 @dataclass
@@ -79,13 +84,28 @@ POSITION_WEIGHTS: dict[str, PositionWeights] = {
 
 
 def _get_position_group(position: str) -> str:
-    if position in GOALKEEPER:
-        return "GK"
-    if position in DEFENDERS:
-        return "DEF"
-    if position in MIDFIELDERS:
+    """
+    Map any StatsBomb position string (or abbreviation) to GK/DEF/MID/FWD.
+
+    Order matters: 'back' is tested before 'wing' so wing-backs ('Left Wing
+    Back') resolve to DEF, not FWD. Unknown/ambiguous labels (e.g.
+    'Substitute') default to MID — a neutral middle rather than FWD, whose
+    goal-heavy weights would inflate the score of anyone unclassified.
+    """
+    if not position:
         return "MID"
-    return "FWD"  # default
+    p = str(position).strip().lower()
+    if p in _POSITION_ABBREV:
+        return _POSITION_ABBREV[p]
+    if "goalkeeper" in p:
+        return "GK"
+    if "back" in p:        # Center Back, Left Back, Wing Back — all defenders
+        return "DEF"
+    if "midfield" in p:
+        return "MID"
+    if "wing" in p or "forward" in p or "striker" in p:
+        return "FWD"
+    return "MID"
 
 
 def compute_player_ratings(df: pd.DataFrame, min_minutes: int = 90) -> pd.DataFrame:
