@@ -42,12 +42,35 @@ class EloModel:
     """
     Incremental Elo rating store. Feed it matches in chronological order;
     read `ratings` for the current strength of every team seen so far.
+
+    `history` records each team's rating *after* every match it played, as
+    (date, rating) checkpoints. This is what makes leakage-free features
+    possible: `rating_as_of(team, date)` returns the strength the team had
+    going INTO a match, never using information from the match itself.
     """
     ratings: dict[str, float] = field(default_factory=dict)
     games_played: dict[str, int] = field(default_factory=dict)
+    history: dict[str, list[tuple[str, float]]] = field(default_factory=dict)
 
     def rating(self, team: str) -> float:
         return self.ratings.get(team, BASE_RATING)
+
+    def rating_as_of(self, team: str, date: str) -> float:
+        """
+        The team's rating going into a match on `date` — i.e. the most recent
+        checkpoint strictly before it. Returns BASE_RATING if the team has no
+        prior history. `date` is an ISO 'YYYY-MM-DD' string (lexicographic
+        order matches chronological order, so no parsing needed).
+        """
+        checkpoints = self.history.get(team)
+        if not checkpoints:
+            return BASE_RATING
+        prior = BASE_RATING
+        for d, r in checkpoints:
+            if d >= date:
+                break
+            prior = r
+        return prior
 
     # ── Probability model ─────────────────────────────────────────────────────
 
@@ -59,8 +82,12 @@ class EloModel:
     # ── Update step ───────────────────────────────────────────────────────────
 
     def update(self, home: str, away: str, home_goals: int, away_goals: int,
-               neutral: bool = False) -> None:
-        """Apply one match result, mutating ratings in place."""
+               neutral: bool = False, date: str | None = None) -> None:
+        """
+        Apply one match result, mutating ratings in place. If `date` is given,
+        append post-match checkpoints to `history` so the result can be queried
+        as-of-date later (for leakage-free features).
+        """
         r_home = self.rating(home)
         r_away = self.rating(away)
 
@@ -80,6 +107,10 @@ class EloModel:
         self.ratings[away] = r_away + k * (score_away - exp_away)
         self.games_played[home] = self.games_played.get(home, 0) + 1
         self.games_played[away] = self.games_played.get(away, 0) + 1
+
+        if date is not None:
+            self.history.setdefault(home, []).append((date, self.ratings[home]))
+            self.history.setdefault(away, []).append((date, self.ratings[away]))
 
     @staticmethod
     def _effective_k(home_goals: int, away_goals: int) -> float:
@@ -116,6 +147,7 @@ def build_from_history(matches: pd.DataFrame) -> EloModel:
                 home_goals=int(m["home_team_score"]),
                 away_goals=int(m["away_team_score"]),
                 neutral=True,   # WC matches: treat as neutral, rating absorbs form
+                date=str(m["match_date"]),
             )
         except (ValueError, TypeError):
             continue  # skip rows with missing scores

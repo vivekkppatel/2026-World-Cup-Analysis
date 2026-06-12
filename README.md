@@ -9,7 +9,7 @@ A real-time player performance and match analytics dashboard built during the 20
 | 🌍 Tournament Overview | Live group standings, top scorers, recent results |
 | 🔵 Team Analysis | Passing networks, xG timelines, formation stats |
 | 👤 Player Stats | Per-90 leaderboards, radar comparisons |
-| 🔮 Match Predictor | Win probability model trained on WC 2014–2022 |
+| 🔮 Match Predictor | Leakage-free logistic regression (Elo + form), temporally validated |
 | 💰 Player Valuation | Contribution scoring — finding undervalued players |
 | 🏆 Bracket | Predicted (Elo + Monte Carlo) vs. reality, with model KPIs |
 
@@ -19,7 +19,7 @@ A real-time player performance and match analytics dashboard built during the 20
 - **Database:** PostgreSQL + SQLAlchemy
 - **BI:** SQL analytical views consumed by Tableau & Power BI — see [docs/BI_SETUP.md](docs/BI_SETUP.md)
 - **Data Sources:** football-data.org API (live), StatsBomb Open Data (historical)
-- **ML:** scikit-learn (Logistic Regression)
+- **ML:** scikit-learn — leakage-free multinomial Logistic Regression (Elo + form), temporal validation; Elo + Monte Carlo bracket simulator
 
 ## Setup
 
@@ -49,21 +49,24 @@ python scripts/seed_db.py
 
 This creates all tables and seeds historical StatsBomb World Cup data (2018 + 2022).
 
-### 5. Train the prediction model
-```bash
-python scripts/train_model.py
-```
-
-Trains a logistic regression model on historical WC data and saves to `models/match_predictor.pkl`.
-
-### 6. Load data & create BI views
+### 5. Load data & create BI views
 ```bash
 python scripts/refresh_live.py            # WC 2026 fixtures + live results → DB
-python scripts/load_statsbomb_history.py  # WC 2018/2022 player stats → DB (slow first run)
+python scripts/load_statsbomb_history.py  # WC 2018/22, Euro, Copa, AFCON player stats (slow first run)
+python scripts/load_fjelstul_history.py   # WC 2010 + 2014 (match/goal level)
+python scripts/fetch_kaggle_data.py && python scripts/load_kaggle_data.py  # team ranks + player form
 python scripts/apply_views.py             # analytical views for Tableau / Power BI
 ```
 
 Re-run `refresh_live.py` any time to pull the latest scores. Connect Tableau or Power BI to the `v_*` views — guide in [docs/BI_SETUP.md](docs/BI_SETUP.md).
+
+### 6. Train the match-prediction model
+```bash
+python scripts/train_model.py     # leakage-free LogReg, strict temporal split + LOTO-CV
+python scripts/predict_wc2026.py  # predict all WC 2026 matches → graded by v_model_scorecard
+```
+
+Trains a multinomial logistic regression on **pre-match features only** (Elo, FIFA rank, rolling form) and validates on a strict temporal hold-out (train pre-2022 → test WC 2022). Reports log loss, Brier, calibration, and edge over a FIFA-rank baseline — saved to `models/match_predictor.pkl`.
 
 ### 7. Simulate the bracket
 ```bash
@@ -122,4 +125,4 @@ worldcup2026/
 
 ## Resume Bullet Points
 
-> Built a real-time analytics platform tracking 64 World Cup 2026 matches across 48 teams. Designed a normalized PostgreSQL schema ingesting dual data sources (live API + historical event data), built interactive Streamlit dashboards for team/player analysis, and trained a logistic regression match outcome model achieving [X]% accuracy on held-out 2022 WC data.
+> Built an end-to-end analytics platform covering 9 international tournaments (104 WC 2026 matches across 48 teams). Designed a normalized PostgreSQL schema ingesting four data sources (live API, StatsBomb event data, historical CSVs, Kaggle), exposed 10 SQL analytical views consumed by Tableau & Power BI, and trained a **leakage-free** multinomial logistic-regression match model (Elo + form features) validated on a strict temporal hold-out — beating a FIFA-rank baseline by ~7 pts across tournaments with calibrated probabilities (Brier 0.62). Built a 10,000-run Monte Carlo bracket simulator with model-vs-reality KPI tracking (Brier, hit rate).

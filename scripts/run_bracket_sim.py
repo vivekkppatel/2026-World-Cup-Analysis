@@ -158,18 +158,15 @@ def ensure_predicted_bracket_table() -> None:
 
 def persist_predictions(result) -> None:
     """
-    Persist the modal knockout bracket two ways:
-      • predicted_bracket — the modal home/away/winner per KO match (display).
-      • predictions       — win probabilities keyed on match_id, so the
-                            v_model_scorecard view can grade them vs reality.
+    Persist the modal knockout bracket to predicted_bracket (the bracket-page
+    display). The per-match win/draw/loss predictions that v_model_scorecard
+    grades are owned by the trained model (scripts/predict_wc2026.py), so this
+    simulator stays out of the predictions table — one model, one scorecard.
     """
     ensure_predicted_bracket_table()
     bracket = result.modal_bracket()
 
     with get_session() as session:
-        num_to_id = {int(n): i for n, i in session.execute(text(
-            "SELECT fifa_match_num, id FROM matches WHERE fifa_match_num IS NOT NULL"
-        )).fetchall()}
         num_to_stage = {int(n): s for n, s in session.execute(text(
             "SELECT fifa_match_num, stage FROM matches WHERE fifa_match_num IS NOT NULL"
         )).fetchall()}
@@ -186,7 +183,6 @@ def persist_predictions(result) -> None:
             pair_tally = result.slot_pair_tally.get(mnum, {})
             pairing_prob = (max(pair_tally.values()) / sum(pair_tally.values())
                             if pair_tally else 0.0)
-            predicted = "HOME" if home_share >= away_share else "AWAY"
 
             session.execute(text("""
                 INSERT INTO predicted_bracket
@@ -199,23 +195,8 @@ def persist_predictions(result) -> None:
                    "winner": slot["winner"], "hp": round(home_share, 4),
                    "ap": round(away_share, 4), "pp": round(pairing_prob, 4),
                    "mv": MODEL_VERSION})
-
-            mid = num_to_id.get(mnum)
-            if mid is not None:
-                session.execute(text("""
-                    INSERT INTO predictions (match_id, home_win_prob, draw_prob,
-                                             away_win_prob, predicted_winner, model_version)
-                    VALUES (:mid, :hw, 0, :aw, :pw, :mv)
-                    ON CONFLICT (match_id) DO UPDATE SET
-                        home_win_prob = EXCLUDED.home_win_prob,
-                        away_win_prob = EXCLUDED.away_win_prob,
-                        predicted_winner = EXCLUDED.predicted_winner,
-                        model_version = EXCLUDED.model_version,
-                        created_at = NOW()
-                """), {"mid": mid, "hw": round(home_share, 4),
-                       "aw": round(away_share, 4), "pw": predicted, "mv": MODEL_VERSION})
             written += 1
-    logger.info(f"Wrote modal bracket + predictions for {written} knockout matches.")
+    logger.info(f"Wrote modal bracket for {written} knockout matches.")
 
 
 def main() -> None:

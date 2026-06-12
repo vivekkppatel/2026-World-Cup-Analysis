@@ -1,22 +1,25 @@
 """
 models/match_predictor.py
 ──────────────────────────
-Logistic Regression model that predicts match outcomes
-(HOME WIN / DRAW / AWAY WIN) trained on WC 2018 + 2022 data.
+Leakage-free Logistic Regression model for match outcomes
+(HOME_WIN / DRAW / AWAY_WIN).
 
-Features used:
-    - FIFA ranking differential (home - away)
-    - xG differential from recent matches
-    - Goals scored / conceded averages
-    - Tournament stage (group vs knockout)
-    - Is neutral venue (always true for WC)
+Features (all pre-match — see models/features.py for why this matters):
+    elo_diff, fifa_rank_gap, form_goals_diff, form_xg_diff,
+    rest_days_diff, is_knockout
 
-This is intentionally a straightforward model. Interpretability
-and the ability to explain every coefficient beats a black-box.
-That's a key interview talking point for analyst roles.
+This replaces an earlier version that leaked the match's own goals/xG into
+its features (fake 96.9% accuracy). Real football outcome models top out
+around 55–60% accuracy; the honest metrics here — log loss, Brier score,
+calibration — are the interview-defensible numbers, not raw accuracy.
+
+Interpretability is deliberate: a multinomial logistic regression lets you
+explain every coefficient ("+100 Elo shifts home-win odds by X"), which beats
+a black box for an analyst portfolio.
 """
+from __future__ import annotations
+
 import logging
-import os
 import pickle
 from pathlib import Path
 from typing import Optional
@@ -24,195 +27,158 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, classification_report
-from sklearn.model_selection import StratifiedKFold, cross_val_score
-from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score, brier_score_loss, log_loss
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+
+from models.features import FEATURE_COLUMNS, LABEL_MAP
 
 logger = logging.getLogger(__name__)
 
 MODEL_PATH = Path(__file__).parent / "match_predictor.pkl"
 LABELS = ["HOME_WIN", "DRAW", "AWAY_WIN"]
+MODEL_VERSION = "logreg-v2"
 
 
 class MatchPredictor:
-    """
-    Logistic Regression match outcome classifier.
-
-    Example:
-        predictor = MatchPredictor()
-        predictor.train(training_df)
-        probs = predictor.predict_proba(home_ranking=5, away_ranking=20,
-                                         home_xg_avg=1.8, away_xg_avg=0.9,
-                                         stage="GROUP_STAGE")
-        # {'HOME_WIN': 0.61, 'DRAW': 0.21, 'AWAY_WIN': 0.18}
-    """
+    """Multinomial logistic regression over leakage-free pre-match features."""
 
     def __init__(self):
         self.pipeline: Optional[Pipeline] = None
-        self.feature_names: list[str] = []
+        self.feature_names: list[str] = list(FEATURE_COLUMNS)
         self.is_trained: bool = False
 
     # ── Training ──────────────────────────────────────────────────────────────
 
-    def build_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Transform a team-match DataFrame (from StatsBombLoader.get_team_match_stats)
-        into match-level feature rows suitable for training.
-
-        Input df must have columns: match_id, team, opponent, goals_for,
-        goals_against, xg, shots, is_home, stage, result
-        """
-        # Pivot to get home/away stats side by side
-        home = df[df["is_home"]].copy()
-        away = df[~df["is_home"]].copy()
-
-        merged = home.merge(
-            away,
-            on="match_id",
-            suffixes=("_home", "_away"),
-        )
-
-        features = pd.DataFrame({
-            "xg_diff":         merged["xg_home"] - merged["xg_away"],
-            "shots_diff":      merged["shots_home"] - merged["shots_away"],
-            "passes_diff":     merged["passes_home"] - merged["passes_away"],
-            "pressures_diff":  merged["pressures_home"] - merged["pressures_away"],
-            "goals_for_home":  merged["goals_for_home"],
-            "goals_for_away":  merged["goals_for_away"],
-            "goals_ag_home":   merged["goals_against_home"],
-            "goals_ag_away":   merged["goals_against_away"],
-            # Stage strings differ by source: StatsBomb "Group Stage" vs
-            # football-data.org "GROUP_STAGE". Empty/unknown counts as group.
-            "is_knockout":     merged["stage_home"].apply(
-                lambda s: 0 if (not s or "group" in str(s).lower()) else 1
-            ),
-        })
-
-        # Target: outcome from home team perspective
-        labels = merged["result_home"].map({"W": 0, "D": 1, "L": 2})
-
-        self.feature_names = features.columns.tolist()
-        return features, labels
-
-    def train(self, df: pd.DataFrame) -> dict:
-        """
-        Train the model on historical match data.
-        Returns a dict with accuracy and CV scores.
-        """
-        X, y = self.build_features(df)
-        X = X.fillna(0)
-
+    def train(self, X: pd.DataFrame, y: pd.Series) -> dict:
+        """Fit the model. Returns in-sample metrics (use evaluate() for honest ones)."""
+        X = X[self.feature_names].fillna(0.0)
         self.pipeline = Pipeline([
             ("scaler", StandardScaler()),
+            # No class_weight balancing: draws are a genuine ~20% minority, and
+            # up-weighting them to parity makes the model over-predict draws and
+            # hurts both accuracy and calibration. Let the base rates stand.
             ("clf", LogisticRegression(
-                solver="lbfgs",
-                max_iter=1000,
-                C=1.0,
-                class_weight="balanced",
-                random_state=42,
+                solver="lbfgs", max_iter=2000, C=1.0, random_state=42,
             )),
         ])
-
-        # 5-fold cross-validation
-        cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-        cv_scores = cross_val_score(self.pipeline, X, y, cv=cv, scoring="accuracy")
-
-        # Fit on full dataset
         self.pipeline.fit(X, y)
         self.is_trained = True
 
-        train_preds = self.pipeline.predict(X)
-        report = classification_report(y, train_preds, target_names=LABELS, output_dict=True)
+        preds = self.pipeline.predict(X)
+        train_acc = accuracy_score(y, preds)
+        logger.info(f"Trained on {len(X)} matches | in-sample acc={train_acc:.3f}")
+        return {"train_accuracy": train_acc, "n_samples": len(X)}
 
-        results = {
-            "train_accuracy": accuracy_score(y, train_preds),
-            "cv_mean":        cv_scores.mean(),
-            "cv_std":         cv_scores.std(),
-            "n_samples":      len(X),
-            "classification_report": report,
+    # ── Evaluation ────────────────────────────────────────────────────────────
+
+    def evaluate(self, X: pd.DataFrame, y: pd.Series) -> dict:
+        """
+        Honest held-out metrics. Accuracy is reported but the probabilistic
+        metrics matter more for a forecasting model:
+          • log_loss — penalises confident wrong calls (lower = better)
+          • brier    — mean squared error of the probability vector
+          • calibration — are 70%-confidence calls right ~70% of the time?
+        """
+        if not self.is_trained:
+            raise RuntimeError("Model not trained.")
+        X = X[self.feature_names].fillna(0.0)
+        proba = self.pipeline.predict_proba(X)
+        preds = proba.argmax(axis=1)
+
+        classes = list(self.pipeline.named_steps["clf"].classes_)
+        ll = log_loss(y, proba, labels=classes)
+        # Multiclass Brier = mean squared error vs one-hot truth
+        onehot = np.zeros_like(proba)
+        for i, label in enumerate(y):
+            onehot[i, classes.index(label)] = 1.0
+        brier = float(np.mean(np.sum((proba - onehot) ** 2, axis=1)))
+
+        return {
+            "accuracy": accuracy_score(y, preds),
+            "log_loss": ll,
+            "brier": brier,
+            "n_samples": len(X),
+            "calibration": self._calibration_bins(proba, y, classes),
         }
-        logger.info(
-            f"Model trained | train_acc={results['train_accuracy']:.3f} "
-            f"| cv={results['cv_mean']:.3f} ± {results['cv_std']:.3f}"
-        )
-        return results
+
+    @staticmethod
+    def _calibration_bins(proba: np.ndarray, y: pd.Series,
+                          classes: list[int], n_bins: int = 5) -> list[dict]:
+        """
+        Reliability of the top predicted probability, bucketed. Each bin reports
+        mean confidence vs observed hit rate — a perfectly calibrated model has
+        them equal.
+        """
+        top_conf = proba.max(axis=1)
+        top_pred = proba.argmax(axis=1)
+        y_arr = np.asarray([classes.index(v) for v in y])
+        hit = (top_pred == y_arr).astype(float)
+
+        bins = np.linspace(0.0, 1.0, n_bins + 1)
+        out = []
+        for lo, hi in zip(bins[:-1], bins[1:]):
+            mask = (top_conf >= lo) & (top_conf < hi if hi < 1.0 else top_conf <= hi)
+            if mask.sum() == 0:
+                continue
+            out.append({
+                "bin": f"{lo:.0%}–{hi:.0%}",
+                "n": int(mask.sum()),
+                "mean_confidence": round(float(top_conf[mask].mean()), 3),
+                "hit_rate": round(float(hit[mask].mean()), 3),
+            })
+        return out
+
+    # ── Baseline for comparison ───────────────────────────────────────────────
+
+    @staticmethod
+    def baseline_accuracy(X: pd.DataFrame, y: pd.Series) -> float:
+        """
+        "Pick the higher-FIFA-ranked team" baseline. Positive fifa_rank_gap
+        means home is better-ranked → predict HOME_WIN; negative → AWAY_WIN.
+        The model has to beat this to have earned its keep.
+        """
+        gap = X["fifa_rank_gap"].values
+        pred = np.where(gap > 0, LABEL_MAP["HOME"], LABEL_MAP["AWAY"])
+        return accuracy_score(y, pred)
 
     # ── Prediction ────────────────────────────────────────────────────────────
 
-    def predict_proba(
-        self,
-        xg_diff: float,
-        shots_diff: float,
-        passes_diff: float = 0.0,
-        pressures_diff: float = 0.0,
-        goals_for_home: float = 1.5,
-        goals_for_away: float = 1.2,
-        goals_ag_home: float = 1.0,
-        goals_ag_away: float = 1.2,
-        is_knockout: int = 0,
-    ) -> dict[str, float]:
-        """
-        Predict win/draw/lose probabilities for a single match.
-
-        xg_diff = expected_home_xg - expected_away_xg
-        Returns: {'HOME_WIN': float, 'DRAW': float, 'AWAY_WIN': float}
-        """
-        if not self.is_trained or self.pipeline is None:
+    def predict_one(self, features: dict) -> dict[str, float]:
+        """Predict {HOME_WIN, DRAW, AWAY_WIN} for one pre-built feature dict."""
+        if not self.is_trained:
             raise RuntimeError("Model not trained. Run .train() or .load() first.")
+        X = pd.DataFrame([{c: features.get(c, 0.0) for c in self.feature_names}])
+        proba = self.pipeline.predict_proba(X)[0]
+        classes = list(self.pipeline.named_steps["clf"].classes_)
+        # Map model class index → label name via LABEL_MAP ordering
+        idx_to_label = {0: "HOME_WIN", 1: "DRAW", 2: "AWAY_WIN"}
+        return {idx_to_label[c]: round(float(p), 4) for c, p in zip(classes, proba)}
 
-        X = pd.DataFrame([{
-            "xg_diff":        xg_diff,
-            "shots_diff":     shots_diff,
-            "passes_diff":    passes_diff,
-            "pressures_diff": pressures_diff,
-            "goals_for_home": goals_for_home,
-            "goals_for_away": goals_for_away,
-            "goals_ag_home":  goals_ag_home,
-            "goals_ag_away":  goals_ag_away,
-            "is_knockout":    is_knockout,
-        }])
-
-        probs = self.pipeline.predict_proba(X)[0]
-        return {label: round(float(prob), 4) for label, prob in zip(LABELS, probs)}
-
-    def predict_from_team_stats(
-        self,
-        home_stats: dict,
-        away_stats: dict,
-        is_knockout: bool = False,
-    ) -> dict[str, float]:
-        """
-        Higher-level prediction from aggregated team stats dicts.
-        home_stats / away_stats should contain: avg_xg, avg_shots,
-        avg_passes, avg_pressures, avg_goals_for, avg_goals_against
-        """
-        return self.predict_proba(
-            xg_diff=home_stats.get("avg_xg", 1.5) - away_stats.get("avg_xg", 1.2),
-            shots_diff=home_stats.get("avg_shots", 12) - away_stats.get("avg_shots", 10),
-            passes_diff=home_stats.get("avg_passes", 450) - away_stats.get("avg_passes", 400),
-            pressures_diff=home_stats.get("avg_pressures", 180) - away_stats.get("avg_pressures", 160),
-            goals_for_home=home_stats.get("avg_goals_for", 1.5),
-            goals_for_away=away_stats.get("avg_goals_for", 1.2),
-            goals_ag_home=home_stats.get("avg_goals_against", 1.0),
-            goals_ag_away=away_stats.get("avg_goals_against", 1.2),
-            is_knockout=int(is_knockout),
+    def coefficients(self) -> pd.DataFrame:
+        """Standardised coefficients per class — the interpretability payoff."""
+        if not self.is_trained:
+            raise RuntimeError("Model not trained.")
+        clf = self.pipeline.named_steps["clf"]
+        idx_to_label = {0: "HOME_WIN", 1: "DRAW", 2: "AWAY_WIN"}
+        return pd.DataFrame(
+            clf.coef_, columns=self.feature_names,
+            index=[idx_to_label[c] for c in clf.classes_],
         )
 
     # ── Persistence ───────────────────────────────────────────────────────────
 
     def save(self, path: Path = MODEL_PATH):
-        """Persist model to disk."""
         if not self.is_trained:
             raise RuntimeError("Cannot save: model not trained.")
         with open(path, "wb") as f:
-            pickle.dump({"pipeline": self.pipeline, "features": self.feature_names}, f)
+            pickle.dump({"pipeline": self.pipeline, "features": self.feature_names,
+                         "version": MODEL_VERSION}, f)
         logger.info(f"Model saved to {path}")
 
     def load(self, path: Path = MODEL_PATH):
-        """Load a persisted model from disk."""
         if not path.exists():
-            raise FileNotFoundError(f"No model file at {path}. Run scripts/train_model.py first.")
+            raise FileNotFoundError(f"No model at {path}. Run scripts/train_model.py.")
         with open(path, "rb") as f:
             state = pickle.load(f)
         self.pipeline = state["pipeline"]
@@ -222,7 +188,6 @@ class MatchPredictor:
 
     @classmethod
     def from_disk(cls, path: Path = MODEL_PATH) -> "MatchPredictor":
-        """Convenience constructor that loads from disk immediately."""
         instance = cls()
         instance.load(path)
         return instance
