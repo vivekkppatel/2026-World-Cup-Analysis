@@ -56,11 +56,11 @@ class OpenFootballLoader:
     def get_matches_2026(self) -> pd.DataFrame:
         """
         Return all 104 WC 2026 matches as a normalized DataFrame with columns:
-        home_team_name, away_team_name, home_score, away_score, stage,
-        group_name, kickoff_utc, venue, status, round_label
+        match_number, home_team_name, away_team_name, home_score, away_score,
+        stage, group_name, kickoff_utc, venue, status, round_label
         """
         raw = self.fetch_raw()
-        rows = [self._normalize_match(m) for m in raw.get("matches", [])]
+        rows = [self._normalize_match(m, idx) for idx, m in enumerate(raw.get("matches", []), start=1)]
         df = pd.DataFrame(rows)
         logger.info(f"openfootball: loaded {len(df)} WC 2026 matches "
                     f"({(df['status'] == 'FINISHED').sum()} finished)")
@@ -103,8 +103,15 @@ class OpenFootballLoader:
         return "KNOCKOUT"  # unknown knockout round — never silently group
 
     @classmethod
-    def _normalize_match(cls, m: dict[str, Any]) -> dict[str, Any]:
-        """Flatten one openfootball match object into pipeline columns."""
+    def _normalize_match(cls, m: dict[str, Any], idx: int) -> dict[str, Any]:
+        """
+        Flatten one openfootball match object into pipeline columns.
+
+        `idx` is the 1-based position in the JSON array, which follows the
+        official FIFA match numbering (1–104). Knockout entries carry an
+        explicit "num" field that takes precedence; group-stage entries
+        don't have one, so the array position is the key.
+        """
         group_raw = m.get("group") or ""          # e.g. "Group A"
         group_name = group_raw.replace("Group", "").strip()[:1]
 
@@ -121,6 +128,7 @@ class OpenFootballLoader:
                 winner = "DRAW"
 
         return {
+            "match_number":   m.get("num") or idx,
             "home_team_name": m.get("team1"),
             "away_team_name": m.get("team2"),
             "home_score":     score1,

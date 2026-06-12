@@ -16,6 +16,7 @@ A real-time player performance and match analytics dashboard built during the 20
 
 - **Frontend:** Streamlit + Plotly
 - **Database:** PostgreSQL + SQLAlchemy
+- **BI:** SQL analytical views consumed by Tableau & Power BI — see [docs/BI_SETUP.md](docs/BI_SETUP.md)
 - **Data Sources:** football-data.org API (live), StatsBomb Open Data (historical)
 - **ML:** scikit-learn (Logistic Regression)
 
@@ -54,7 +55,16 @@ python scripts/train_model.py
 
 Trains a logistic regression model on historical WC data and saves to `models/match_predictor.pkl`.
 
-### 6. Run the dashboard
+### 6. Load data & create BI views
+```bash
+python scripts/refresh_live.py            # WC 2026 fixtures + live results → DB
+python scripts/load_statsbomb_history.py  # WC 2018/2022 player stats → DB (slow first run)
+python scripts/apply_views.py             # analytical views for Tableau / Power BI
+```
+
+Re-run `refresh_live.py` any time to pull the latest scores. Connect Tableau or Power BI to the `v_*` views — guide in [docs/BI_SETUP.md](docs/BI_SETUP.md).
+
+### 7. Run the dashboard
 ```bash
 streamlit run app/main.py
 ```
@@ -94,9 +104,13 @@ worldcup2026/
 ## Data Sources
 
 - **[football-data.org](https://www.football-data.org/)** — Live match results, standings, scorers for WC 2026 (free tier, 10 req/min)
-- **[StatsBomb Open Data](https://github.com/statsbomb/open-data)** — Event-level data (shots, passes, pressures) for WC 2018 and 2022
-- **[openfootball/worldcup.json](https://github.com/openfootball/worldcup.json)** — All 104 WC 2026 fixtures, groups, and venues; public domain (CC0), no API key. Fallback/bootstrap source (`python -c` via `data/ingest/openfootball_loader.py`)
-- **[Fjelstul World Cup Database](https://github.com/jfjelstul/worldcup)** — Full 1930–2022 match history for team-strength priors and historical EDA (`python scripts/fetch_external_data.py`). © Joshua C. Fjelstul, Ph.D., CC-BY-SA 4.0
+- **[StatsBomb Open Data](https://github.com/statsbomb/open-data)** — Event-level data (shots, passes, pressures) for **WC 2018/2022, Euro 2020/2024, Copa América 2024, AFCON 2023** (`python scripts/load_statsbomb_history.py`)
+- **[openfootball/worldcup.json](https://github.com/openfootball/worldcup.json)** — All 104 WC 2026 fixtures, groups, and venues; public domain (CC0), no API key. Fallback/bootstrap source (`scripts/refresh_live.py` via `data/ingest/openfootball_loader.py`)
+- **[Fjelstul World Cup Database](https://github.com/jfjelstul/worldcup)** — Full 1930–2022 match history; WC 2010 + 2014 are loaded into the DB at match/goal level (`python scripts/fetch_external_data.py`, then `python scripts/load_fjelstul_history.py`). © Joshua C. Fjelstul, Ph.D., CC-BY-SA 4.0
+- **[Kaggle: FIFA World Cup Complete Dataset 1930–2026](https://www.kaggle.com/datasets/kulkarniparth09/fifa-world-cup-complete-dataset-19302026)** — 2026 team metadata (FIFA ranks, confederations, coaches) and a 1930–2026 tournament-edition summary. Its match data is a small curated subset — Fjelstul remains the historical match source of record
+- **[Kaggle: Road to 2026 Squad Prediction](https://www.kaggle.com/datasets/ardaciftci/road-to-2026-world-cup-squad-prediction)** — Pre-tournament form snapshot for ~1,200 national-team players (appearances, goals, assists, minutes, contribution metrics). Loaded into `player_form_2026` / exposed as `v_player_form_2026` (`python scripts/fetch_kaggle_data.py`, then `python scripts/load_kaggle_data.py`)
+
+**Tournament coverage in PostgreSQL:** WC 2010 · WC 2014 · WC 2018 · WC 2022 · WC 2026 (live) · EURO 2020 · EURO 2024 · COPA 2024 · AFCON 2023 — sliceable via the `tournament_label` column in every BI view.
 
 ## Resume Bullet Points
 

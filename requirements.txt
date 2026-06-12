@@ -17,6 +17,7 @@ alembic>=1.14
 # HTTP / Data Sources
 requests>=2.32
 statsbombpy>=1.13.0
+kagglehub>=0.3
 
 # ML
 scikit-learn>=1.7

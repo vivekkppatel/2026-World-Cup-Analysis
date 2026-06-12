@@ -27,7 +27,10 @@ def main():
     from data.ingest.statsbomb_loader import StatsBombLoader, COMPETITIONS
 
     all_data: list[pd.DataFrame] = []
-    for key, comp in COMPETITIONS.items():
+    # World Cups only — Euro/Copa/AFCON entries in COMPETITIONS exist for
+    # player valuation and would distort a WC-specific outcome model.
+    wc_comps = {k: c for k, c in COMPETITIONS.items() if c["competition"] == "WORLD_CUP"}
+    for key, comp in wc_comps.items():
         logger.info(f"Loading team stats for {key} …")
         try:
             df = StatsBombLoader.get_team_match_stats(

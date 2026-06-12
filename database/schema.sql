@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS players (
     id              SERIAL PRIMARY KEY,
     api_id          INTEGER UNIQUE,
     statsbomb_id    INTEGER UNIQUE,
+    fjelstul_id     VARCHAR(20) UNIQUE,      -- Fjelstul DB id, e.g. 'P-09032'
     name            VARCHAR(150) NOT NULL,
     position        VARCHAR(30),             -- GK, CB, LB, CM, CAM, ST …
     nationality     VARCHAR(100),
@@ -33,10 +34,16 @@ CREATE TABLE IF NOT EXISTS players (
 -- ── Matches ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS matches (
     id              SERIAL PRIMARY KEY,
-    api_id          INTEGER UNIQUE,
-    statsbomb_id    INTEGER UNIQUE,
+    api_id          INTEGER UNIQUE,          -- football-data.org match id
+    statsbomb_id    INTEGER UNIQUE,          -- StatsBomb match id (historical)
+    fifa_match_num  SMALLINT UNIQUE,         -- official WC2026 match number 1-104
+    fjelstul_id     VARCHAR(20) UNIQUE,      -- Fjelstul DB id, e.g. 'M-2014-01'
+    competition     VARCHAR(20),             -- WORLD_CUP | EURO | COPA_AMERICA | AFCON
+    tournament_label VARCHAR(20),            -- 'WC 2022', 'EURO 2024', …
     home_team_id    INTEGER REFERENCES teams(id),
     away_team_id    INTEGER REFERENCES teams(id),
+    home_placeholder VARCHAR(20),            -- unresolved KO slot, e.g. '2A', 'W73'
+    away_placeholder VARCHAR(20),
     home_score      SMALLINT,
     away_score      SMALLINT,
     stage           VARCHAR(30),             -- 'GROUP_STAGE', 'ROUND_OF_16', etc.
@@ -125,6 +132,7 @@ CREATE TABLE IF NOT EXISTS predictions (
 );
 
 -- ── Indexes ───────────────────────────────────────────────────
+CREATE UNIQUE INDEX IF NOT EXISTS uq_teams_name          ON teams(name);
 CREATE INDEX IF NOT EXISTS idx_matches_status         ON matches(status);
 CREATE INDEX IF NOT EXISTS idx_matches_stage          ON matches(stage);
 CREATE INDEX IF NOT EXISTS idx_player_match_player_id ON player_match_stats(player_id);

@@ -24,15 +24,15 @@ st.subheader("Composite Player Contribution Score (CPCS)")
 st.caption(
     "Position-adjusted, per-90 weighted scoring model. "
     "High CPCS + low minutes = undervalued player. "
-    "StatsBomb WC 2022 data."
+    "StatsBomb event data — select a tournament in the sidebar."
 )
 
 BG, TEXT, PRIMARY, ACCENT = "#0F0F23", "#FAFAFA", "#00A86B", "#E8C547"
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 @st.cache_data(ttl=3600, show_spinner="Computing player ratings …")
-def load_rated_players(min_minutes: int = 90) -> pd.DataFrame:
-    comp = COMPETITIONS["wc_2022"]
+def load_rated_players(tournament_key: str, min_minutes: int = 90) -> pd.DataFrame:
+    comp = COMPETITIONS[tournament_key]
     raw = StatsBombLoader.get_player_tournament_stats(
         competition_id=comp["competition_id"],
         season_id=comp["season_id"],
@@ -42,10 +42,16 @@ def load_rated_players(min_minutes: int = 90) -> pd.DataFrame:
         return raw
     return compute_player_ratings(raw, min_minutes=min_minutes)
 
+tournament_key = st.sidebar.selectbox(
+    "Tournament",
+    options=list(COMPETITIONS),
+    format_func=lambda k: COMPETITIONS[k]["label"],
+    index=list(COMPETITIONS).index("wc_2022"),
+)
 min_min = st.sidebar.slider("Min Minutes Played", 45, 400, 90, step=45)
 
 try:
-    rated_df = load_rated_players(min_min)
+    rated_df = load_rated_players(tournament_key, min_min)
     data_loaded = not rated_df.empty
 except Exception as e:
     st.error(f"Error: {e}")

@@ -26,9 +26,23 @@ from statsbombpy import sb
 logger = logging.getLogger(__name__)
 
 # ── StatsBomb Competition / Season IDs ────────────────────────────────────────
+# "competition" groups tournaments for filtering (e.g. the match predictor
+# trains on WORLD_CUP only); "label" is the human-readable BI dimension.
 COMPETITIONS = {
-    "wc_2018": {"competition_id": 43, "season_id": 3},
-    "wc_2022": {"competition_id": 43, "season_id": 106},
+    "wc_2018":    {"competition_id": 43,   "season_id": 3,
+                   "competition": "WORLD_CUP", "label": "WC 2018"},
+    "wc_2022":    {"competition_id": 43,   "season_id": 106,
+                   "competition": "WORLD_CUP", "label": "WC 2022"},
+    # Non-WC tournaments: player-valuation context only — NOT used to
+    # train the WC match predictor.
+    "euro_2020":  {"competition_id": 55,   "season_id": 43,
+                   "competition": "EURO", "label": "EURO 2020"},
+    "euro_2024":  {"competition_id": 55,   "season_id": 282,
+                   "competition": "EURO", "label": "EURO 2024"},
+    "copa_2024":  {"competition_id": 223,  "season_id": 282,
+                   "competition": "COPA_AMERICA", "label": "COPA 2024"},
+    "afcon_2023": {"competition_id": 1267, "season_id": 107,
+                   "competition": "AFCON", "label": "AFCON 2023"},
 }
 
 
