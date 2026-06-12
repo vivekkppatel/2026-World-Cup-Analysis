@@ -138,10 +138,12 @@ SELECT
     SUM(s.key_passes)                       AS key_passes,
     SUM(s.pressures)                        AS pressures,
     SUM(s.tackles)                          AS tackles,
-    ROUND(SUM(s.goals)     * 90.0 / NULLIF(SUM(s.minutes_played), 0), 3) AS goals_p90,
-    ROUND(SUM(s.xg)        * 90.0 / NULLIF(SUM(s.minutes_played), 0), 3) AS xg_p90,
-    ROUND(SUM(s.shots)     * 90.0 / NULLIF(SUM(s.minutes_played), 0), 3) AS shots_p90,
-    ROUND(SUM(s.pressures) * 90.0 / NULLIF(SUM(s.minutes_played), 0), 3) AS pressures_p90
+    ROUND(SUM(s.goals)      * 90.0 / NULLIF(SUM(s.minutes_played), 0), 3) AS goals_p90,
+    ROUND(SUM(s.assists)    * 90.0 / NULLIF(SUM(s.minutes_played), 0), 3) AS assists_p90,
+    ROUND(SUM(s.xg)         * 90.0 / NULLIF(SUM(s.minutes_played), 0), 3) AS xg_p90,
+    ROUND(SUM(s.shots)      * 90.0 / NULLIF(SUM(s.minutes_played), 0), 3) AS shots_p90,
+    ROUND(SUM(s.key_passes) * 90.0 / NULLIF(SUM(s.minutes_played), 0), 3) AS key_passes_p90,
+    ROUND(SUM(s.pressures)  * 90.0 / NULLIF(SUM(s.minutes_played), 0), 3) AS pressures_p90
 FROM player_match_stats s
 JOIN players p ON p.id = s.player_id
 JOIN matches m ON m.id = s.match_id

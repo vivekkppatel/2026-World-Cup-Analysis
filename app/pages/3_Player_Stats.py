@@ -1,139 +1,120 @@
 """
 app/pages/3_Player_Stats.py
 ──────────────────────────────
-Per-90 leaderboards and player radar comparisons.
-Data: StatsBomb historical + live tournament scorers.
+Per-90 leaderboards and percentile-radar comparisons across six tournaments.
+
+Reads from the v_player_stats BI view (PostgreSQL) — instant, no StatsBomb
+cold-download. Only metrics with real data are offered (xA and progressive
+passes are absent from StatsBomb open data, so they're excluded rather than
+shown as misleading zeros).
 """
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
-from data.ingest.statsbomb_loader import StatsBombLoader, COMPETITIONS
 from app.utils.charts import player_radar
+from database.db import engine
 
 st.set_page_config(page_title="Player Stats · WC 2026", page_icon="👤", layout="wide")
 st.title("👤 Player Stats")
-st.caption("Per-90-minute rates · StatsBomb WC 2022 historical data")
+st.caption("Per-90 leaderboards · percentile radars · six international tournaments")
 
-BG, TEXT = "#0F0F23", "#FAFAFA"
+METRICS = {
+    "xG / 90": "xg_p90", "Goals / 90": "goals_p90", "Assists / 90": "assists_p90",
+    "Shots / 90": "shots_p90", "Key Passes / 90": "key_passes_p90",
+    "Pressures / 90": "pressures_p90",
+}
 
-# ── Data loading ──────────────────────────────────────────────────────────────
-@st.cache_data(ttl=3600, show_spinner="Building player stats (this takes ~60 seconds first run) …")
-def load_player_stats() -> pd.DataFrame:
-    loader = StatsBombLoader()
-    comp = COMPETITIONS["wc_2022"]
-    return loader.get_player_tournament_stats(
-        competition_id=comp["competition_id"],
-        season_id=comp["season_id"],
-        min_minutes=45,
-    )
 
-try:
-    players_df = load_player_stats()
-    data_loaded = not players_df.empty
-except Exception as e:
-    st.error(f"Error loading player data: {e}")
-    data_loaded = False
+# ── Loaders ───────────────────────────────────────────────────────────────────
+@st.cache_data(ttl=3600, show_spinner="Loading tournaments …")
+def load_tournaments() -> list[str]:
+    df = pd.read_sql(
+        "SELECT tournament_label, MIN(tournament_year) y FROM v_player_stats "
+        "WHERE minutes > 0 GROUP BY tournament_label ORDER BY y DESC", engine)
+    return df["tournament_label"].tolist()
 
-if not data_loaded:
-    st.warning("Player data unavailable. Ensure statsbombpy is installed.")
+
+@st.cache_data(ttl=3600, show_spinner="Loading player stats …")
+def load_players(tournament: str) -> pd.DataFrame:
+    return pd.read_sql(
+        "SELECT player, position, team, matches_played, minutes, goals, assists, "
+        "xg, shots, key_passes, pressures, tackles, goals_p90, assists_p90, "
+        "xg_p90, shots_p90, key_passes_p90, pressures_p90 "
+        "FROM v_player_stats WHERE tournament_label = %(t)s AND minutes > 0",
+        engine, params={"t": tournament})
+
+
+tournaments = load_tournaments()
+if not tournaments:
+    st.warning("No player data. Run `python scripts/load_statsbomb_history.py`.")
     st.stop()
 
-# ── Sidebar filters ───────────────────────────────────────────────────────────
+# ── Filters ───────────────────────────────────────────────────────────────────
 st.sidebar.header("Filters")
-min_min = st.sidebar.slider("Minimum Minutes Played", 45, 600, 180, step=45)
+tournament = st.sidebar.selectbox(
+    "Tournament", tournaments,
+    index=tournaments.index("WC 2022") if "WC 2022" in tournaments else 0)
+players_df = load_players(tournament)
+
+max_min = int(players_df["minutes"].max()) if not players_df.empty else 600
+min_min = st.sidebar.slider("Minimum minutes", 45, max_min, min(180, max_min), step=45)
 positions = ["All"] + sorted(players_df["position"].dropna().unique().tolist())
 pos_filter = st.sidebar.selectbox("Position", positions)
 
-filtered = players_df[players_df["minutes_played"] >= min_min].copy()
+filtered = players_df[players_df["minutes"] >= min_min].copy()
 if pos_filter != "All":
     filtered = filtered[filtered["position"] == pos_filter]
 
-# ── Metric selector ───────────────────────────────────────────────────────────
-metric_options = {
-    "xG / 90":                    "xg_p90",
-    "Goals / 90":                 "goals_p90",
-    "Assists / 90":               "assists_p90",
-    "xA / 90":                    "xa_p90",
-    "Pressures / 90":             "pressures_p90",
-    "Progressive Passes / 90":    "progressive_passes_p90",
-    "Progressive Carries / 90":   "progressive_carries_p90",
-    "Key Passes / 90":            "key_passes_p90",
-}
-metric_label = st.selectbox("Rank players by", list(metric_options.keys()))
-metric_col = metric_options[metric_label]
+if filtered.empty:
+    st.info("No players match these filters — lower the minutes threshold.")
+    st.stop()
 
 # ── Leaderboard ───────────────────────────────────────────────────────────────
+metric_label = st.selectbox("Rank players by", list(METRICS.keys()))
+metric_col = METRICS[metric_label]
 st.subheader(f"🏆 Top 20 — {metric_label}")
 
-if metric_col not in filtered.columns:
-    st.warning(f"Metric '{metric_col}' not available in this dataset.")
-else:
-    top20 = filtered.nlargest(20, metric_col)[
-        ["player_name", "team_name", "position", "minutes_played",
-         metric_col, "goals_p90", "assists_p90", "xg_p90", "xa_p90"]
-    ].copy()
+# Columns to show: identity + ranked metric + a few standard per-90s (deduped,
+# since the ranked metric may already be one of them).
+base_cols = ["player", "team", "position", "minutes", metric_col,
+             "goals_p90", "assists_p90", "xg_p90"]
+cols = list(dict.fromkeys(base_cols))   # preserve order, drop duplicates
+top20 = filtered.nlargest(20, metric_col)[cols].round(3)
 
-    top20 = top20.rename(columns={
-        "player_name": "Player", "team_name": "Team", "position": "Pos",
-        "minutes_played": "Mins", metric_col: metric_label,
-        "goals_p90": "G/90", "assists_p90": "A/90",
-        "xg_p90": "xG/90", "xa_p90": "xA/90",
-    })
+labels = {"player": "Player", "team": "Team", "position": "Pos", "minutes": "Mins",
+          "goals_p90": "G/90", "assists_p90": "A/90", "xg_p90": "xG/90",
+          metric_col: metric_label}
+config = {c: labels.get(c, c) for c in cols}
+config[metric_col] = st.column_config.ProgressColumn(
+    metric_label, min_value=0, max_value=float(top20[metric_col].max() or 1))
 
-    st.dataframe(
-        top20.round(3),
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            metric_label: st.column_config.ProgressColumn(
-                metric_label,
-                min_value=0,
-                max_value=float(top20[metric_label].max()),
-            ),
-        },
-    )
+st.dataframe(top20, hide_index=True, use_container_width=True, column_config=config)
 
 st.divider()
 
-# ── Player radar comparison ───────────────────────────────────────────────────
+# ── Radar comparison (percentile ranks within the filtered pool) ──────────────
 st.subheader("🎯 Player Radar Comparison")
-col1, col2 = st.columns(2)
-
-all_players = sorted(filtered["player_name"].unique())
-
-with col1:
-    player_a = st.selectbox("Player A", all_players, index=0)
-    if player_a:
-        row_a = filtered[filtered["player_name"] == player_a].iloc[0]
-        st.plotly_chart(player_radar(row_a, label=player_a), use_container_width=True)
-        st.caption(f"**{player_a}** · {row_a.get('team_name', '')} · {row_a.get('position', '')} · {int(row_a.get('minutes_played', 0))} mins")
-
-with col2:
-    player_b_idx = min(1, len(all_players) - 1)
-    player_b = st.selectbox("Player B", all_players, index=player_b_idx)
-    if player_b:
-        row_b = filtered[filtered["player_name"] == player_b].iloc[0]
-        st.plotly_chart(player_radar(row_b, label=player_b), use_container_width=True)
-        st.caption(f"**{player_b}** · {row_b.get('team_name', '')} · {row_b.get('position', '')} · {int(row_b.get('minutes_played', 0))} mins")
+st.caption("Each axis is the player's percentile rank within the current filter — "
+           "so the shape shows what they're *relatively* elite at.")
+all_players = sorted(filtered["player"].unique())
+c1, c2 = st.columns(2)
+for col, default in ((c1, 0), (c2, min(1, len(all_players) - 1))):
+    with col:
+        name = st.selectbox(f"Player {'A' if default == 0 else 'B'}", all_players,
+                            index=default, key=f"p{default}")
+        row = filtered[filtered["player"] == name].iloc[0]
+        st.plotly_chart(player_radar(row, pool=filtered, label=name),
+                        use_container_width=True)
+        st.caption(f"**{name}** · {row['team']} · {row['position']} · {int(row['minutes'])} mins")
 
 st.divider()
 
-# ── Full stats table ──────────────────────────────────────────────────────────
-with st.expander("📋 Full Player Stats Table"):
-    display_cols = [c for c in [
-        "player_name", "team_name", "position", "minutes_played",
-        "goals", "assists", "xg", "xa", "shots",
-        "goals_p90", "assists_p90", "xg_p90", "xa_p90",
-        "pressures_p90", "progressive_passes_p90",
-    ] if c in filtered.columns]
-
-    st.dataframe(
-        filtered[display_cols].round(3),
-        hide_index=True,
-        use_container_width=True,
-    )
-    st.caption(f"{len(filtered)} players shown · minimum {min_min} minutes")
+# ── Full table ────────────────────────────────────────────────────────────────
+with st.expander("📋 Full player stats table"):
+    st.dataframe(filtered.round(3), hide_index=True, use_container_width=True)
+    st.caption(f"{len(filtered)} players · minimum {min_min} minutes · {tournament}")

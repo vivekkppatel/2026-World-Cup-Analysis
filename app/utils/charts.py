@@ -74,31 +74,49 @@ def top_scorers_bar(df: pd.DataFrame, n: int = 10) -> go.Figure:
     return fig
 
 
-def player_radar(player_row: pd.Series, label: str = "") -> go.Figure:
-    """
-    Spider/radar chart for a single player's normalised per-90 stats.
-    player_row must contain: goals_p90, assists_p90, xg_p90,
-    xa_p90, pressures_p90, progressive_passes_p90
-    """
-    categories = ["Goals/90", "Assists/90", "xG/90", "xA/90",
-                  "Pressures/90", "Prog Passes/90"]
-    keys = ["goals_p90", "assists_p90", "xg_p90",
-            "xa_p90", "pressures_p90", "progressive_passes_p90"]
+# Radar axes: real, populated per-90 metrics (xa/progressive are all-zero in
+# StatsBomb open data, so they're deliberately excluded).
+_RADAR_KEYS = ["goals_p90", "assists_p90", "xg_p90",
+               "shots_p90", "key_passes_p90", "pressures_p90"]
+_RADAR_LABELS = ["Goals/90", "Assists/90", "xG/90",
+                 "Shots/90", "Key Passes/90", "Pressures/90"]
 
-    values = [float(player_row.get(k, 0)) for k in keys]
+
+def player_radar(player_row: pd.Series, pool: pd.DataFrame | None = None,
+                 label: str = "") -> go.Figure:
+    """
+    Radar chart of a player's per-90 profile as PERCENTILE RANKS within a pool.
+
+    Plotting raw per-90 values on one axis is misleading: pressures (~15/90)
+    dwarf goals (~0.5/90), so every player looks like a flat pressing blob.
+    Ranking each metric 0–100% against the comparison pool puts them on a
+    common scale, so the shape reflects what a player is *relatively* good at.
+
+    `pool` is the set of players to rank against (e.g. the filtered leaderboard);
+    if omitted, the chart falls back to the single row's raw values.
+    """
+    pct = []
+    for k in _RADAR_KEYS:
+        val = float(player_row.get(k, 0) or 0)
+        if pool is not None and k in pool.columns and len(pool) > 1:
+            series = pool[k].fillna(0).astype(float)
+            pct.append(round((series < val).mean() * 100, 1))
+        else:
+            pct.append(val)
 
     fig = go.Figure(go.Scatterpolar(
-        r=values + [values[0]],
-        theta=categories + [categories[0]],
+        r=pct + [pct[0]],
+        theta=_RADAR_LABELS + [_RADAR_LABELS[0]],
         fill="toself",
-        fillcolor=f"rgba(0, 168, 107, 0.35)",
+        fillcolor="rgba(0, 168, 107, 0.35)",
         line=dict(color=PRIMARY, width=2),
-        name=label or str(player_row.get("player_name", "")),
+        name=label or str(player_row.get("player", player_row.get("player_name", ""))),
+        hovertemplate="%{theta}: %{r:.0f}th pct<extra></extra>",
     ))
     fig.update_layout(
         polar=dict(
             bgcolor=SECONDARY,
-            radialaxis=dict(visible=True, showticklabels=False),
+            radialaxis=dict(visible=True, range=[0, 100], showticklabels=False),
             angularaxis=dict(tickfont=dict(size=11, color=TEXT)),
         ),
         plot_bgcolor=BG, paper_bgcolor=BG,
