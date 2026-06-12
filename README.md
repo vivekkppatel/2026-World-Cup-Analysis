@@ -80,6 +80,18 @@ Builds team strength from 92 years of World Cup Elo blended with current FIFA ra
 streamlit run app/main.py
 ```
 
+## Tests
+
+```bash
+pytest                                          # 88 unit tests, ~2s
+pytest --cov=models --cov=data.transform        # 82% coverage on core logic
+```
+
+The suite covers the pure logic — Elo math, **leakage-safety of the feature
+pipeline** (a test fails if any feature ever depends on the match it
+describes), position classification, team-name canonicalization, and the
+Monte Carlo bracket. No database or network needed.
+
 ## Project Structure
 
 ```

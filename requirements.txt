@@ -29,6 +29,7 @@ tqdm>=4.66
 
 # Dev / Testing
 pytest>=8.3
+pytest-cov>=5.0
 black>=24.10
 ipykernel>=6.29
 scipy>=1.14
