@@ -18,13 +18,16 @@ import pandas as pd
 import streamlit as st
 
 from app.utils.charts import standings_bar, top_scorers_bar
+from app.utils.live import live_banner
 from app.utils.theme import inject_theme
 from database.db import engine
 
 st.set_page_config(page_title="Tournament Overview · WC 2026", page_icon="🌍", layout="wide")
 inject_theme()
 st.title("🌍 Tournament Overview")
-st.caption("Group stage standings, scorers & fixtures · computed from the database")
+st.caption("Group stage standings, scorers & fixtures · auto-updating from live feeds")
+
+live_banner()
 
 TOURNAMENT = "WC 2026"
 
@@ -61,85 +64,92 @@ def load_fixtures() -> pd.DataFrame:
         "away_team, venue, status FROM v_upcoming_fixtures", engine)
 
 
-standings_df = load_standings()
-scorers_df = load_scorers()
-results_df = load_results()
-fixtures_df = load_fixtures()
+# Everything below re-queries the DB on its own every 2 minutes (st.fragment),
+# so as the live feed upserts new scores the page updates with no interaction.
+@st.fragment(run_every=120)
+def live_body():
+    standings_df = load_standings()
+    scorers_df = load_scorers()
+    results_df = load_results()
+    fixtures_df = load_fixtures()
 
-# ── KPI row ───────────────────────────────────────────────────────────────────
-n_played = len(results_df)
-n_total = n_played + len(fixtures_df)
-goals = int((results_df["home_score"].fillna(0) + results_df["away_score"].fillna(0)).sum())
+    # ── KPI row ──
+    n_played = len(results_df)
+    n_total = n_played + len(fixtures_df)
+    goals = int((results_df["home_score"].fillna(0) + results_df["away_score"].fillna(0)).sum())
 
-k1, k2, k3, k4 = st.columns(4)
-k1.metric("Matches Played", n_played)
-k2.metric("Remaining", n_total - n_played)
-k3.metric("Goals Scored", goals)
-k4.metric("Goals / Match", f"{goals / max(n_played, 1):.2f}")
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Matches Played", n_played)
+    k2.metric("Remaining", n_total - n_played)
+    k3.metric("Goals Scored", goals)
+    k4.metric("Goals / Match", f"{goals / max(n_played, 1):.2f}")
 
-if n_played == 0:
-    st.info("⚽ The tournament starts soon — standings and results fill in live as "
-            "matches finish. Run `python scripts/refresh_live.py` to pull the latest.")
+    if n_played == 0:
+        st.info("⚽ Kickoff imminent — standings and results fill in automatically "
+                "as matches finish (auto-updating every few minutes).")
 
-st.divider()
+    st.divider()
 
-# ── Group standings ───────────────────────────────────────────────────────────
-st.subheader("Group Standings")
-if not standings_df.empty:
-    groups = sorted(standings_df["group_name"].dropna().unique())
-    for row in [groups[i:i + 4] for i in range(0, len(groups), 4)]:
-        tabs = st.tabs([f"Group {g}" for g in row])
-        for tab, group in zip(tabs, row):
-            with tab:
-                gdf = standings_df[standings_df["group_name"] == group]
-                c_chart, c_table = st.columns([1.2, 1])
-                with c_chart:
-                    st.plotly_chart(standings_bar(gdf, group), use_container_width=True)
-                with c_table:
-                    cols = ["team_name", "played", "won", "drawn", "lost",
-                            "goals_for", "goals_against", "points"]
-                    st.dataframe(
-                        gdf[cols].rename(columns={
-                            "team_name": "Team", "played": "P", "won": "W",
-                            "drawn": "D", "lost": "L", "goals_for": "GF",
-                            "goals_against": "GA", "points": "Pts"}),
-                        hide_index=True, use_container_width=True)
-else:
-    st.info("Standings will populate once teams are seeded.")
-
-st.divider()
-
-# ── Top scorers + recent results ──────────────────────────────────────────────
-c_scorers, c_results = st.columns(2)
-with c_scorers:
-    st.subheader("⚽ Top Scorers")
-    if not scorers_df.empty:
-        st.plotly_chart(top_scorers_bar(scorers_df, n=10), use_container_width=True)
+    # ── Group standings ──
+    st.subheader("Group Standings")
+    if not standings_df.empty:
+        groups = sorted(standings_df["group_name"].dropna().unique())
+        for row in [groups[i:i + 4] for i in range(0, len(groups), 4)]:
+            tabs = st.tabs([f"Group {g}" for g in row])
+            for tab, group in zip(tabs, row):
+                with tab:
+                    gdf = standings_df[standings_df["group_name"] == group]
+                    c_chart, c_table = st.columns([1.2, 1])
+                    with c_chart:
+                        st.plotly_chart(standings_bar(gdf, group), use_container_width=True)
+                    with c_table:
+                        cols = ["team_name", "played", "won", "drawn", "lost",
+                                "goals_for", "goals_against", "points"]
+                        st.dataframe(
+                            gdf[cols].rename(columns={
+                                "team_name": "Team", "played": "P", "won": "W",
+                                "drawn": "D", "lost": "L", "goals_for": "GF",
+                                "goals_against": "GA", "points": "Pts"}),
+                            hide_index=True, use_container_width=True)
     else:
-        st.info("Scorer leaderboard fills in once goals are scored.")
+        st.info("Standings will populate once teams are seeded.")
 
-with c_results:
-    st.subheader("📋 Recent Results")
-    if not results_df.empty:
-        for _, m in results_df.head(8).iterrows():
-            hs, as_ = int(m["home_score"]), int(m["away_score"])
-            stage = str(m["stage"]).replace("_", " ").title()
-            st.markdown(f"**{m['home_team']} {hs}–{as_} {m['away_team']}** · *{stage}*")
+    st.divider()
+
+    # ── Top scorers + recent results ──
+    c_scorers, c_results = st.columns(2)
+    with c_scorers:
+        st.subheader("⚽ Top Scorers")
+        if not scorers_df.empty:
+            st.plotly_chart(top_scorers_bar(scorers_df, n=10), use_container_width=True)
+        else:
+            st.info("Scorer leaderboard fills in once goals are scored.")
+
+    with c_results:
+        st.subheader("📋 Recent Results")
+        if not results_df.empty:
+            for _, m in results_df.head(8).iterrows():
+                hs, as_ = int(m["home_score"]), int(m["away_score"])
+                stage = str(m["stage"]).replace("_", " ").title()
+                st.markdown(f"**{m['home_team']} {hs}–{as_} {m['away_team']}** · *{stage}*")
+        else:
+            st.info("Results appear here as matches finish.")
+
+    st.divider()
+
+    # ── Upcoming fixtures ──
+    st.subheader("📅 Upcoming Fixtures")
+    if not fixtures_df.empty:
+        disp = fixtures_df.head(12).copy()
+        disp["Kickoff"] = pd.to_datetime(disp["kickoff_utc"]).dt.strftime("%b %d · %H:%M UTC")
+        disp["Match"] = disp["home_team"] + " vs " + disp["away_team"]
+        disp["Stage"] = disp["stage"].str.replace("_", " ").str.title()
+        st.dataframe(
+            disp[["Kickoff", "Match", "Stage", "group_name", "venue"]].rename(
+                columns={"group_name": "Grp", "venue": "Venue"}),
+            hide_index=True, use_container_width=True)
     else:
-        st.info("Results appear here as matches finish.")
+        st.info("No upcoming fixtures found.")
 
-st.divider()
 
-# ── Upcoming fixtures ─────────────────────────────────────────────────────────
-st.subheader("📅 Upcoming Fixtures")
-if not fixtures_df.empty:
-    disp = fixtures_df.head(12).copy()
-    disp["Kickoff"] = pd.to_datetime(disp["kickoff_utc"]).dt.strftime("%b %d · %H:%M UTC")
-    disp["Match"] = disp["home_team"] + " vs " + disp["away_team"]
-    disp["Stage"] = disp["stage"].str.replace("_", " ").str.title()
-    st.dataframe(
-        disp[["Kickoff", "Match", "Stage", "group_name", "venue"]].rename(
-            columns={"group_name": "Grp", "venue": "Venue"}),
-        hide_index=True, use_container_width=True)
-else:
-    st.info("No upcoming fixtures found.")
+live_body()

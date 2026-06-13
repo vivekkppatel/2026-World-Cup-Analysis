@@ -16,6 +16,7 @@ Run:
     python scripts/run_bracket_sim.py --sims 10000
 """
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -42,8 +43,29 @@ KO_STAGES = ("LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS",
              "THIRD_PLACE", "FINAL")
 
 
+def _recent_form_bonus() -> dict[str, float]:
+    """
+    Elo-point bonus from a team's most recent major tournament (Euro 2024,
+    Copa 2024, WC 2022 …). Reigning champions and strong recent campaigns get
+    a lift; this is why Spain (Euro 2024 winners) and Argentina (Copa 2024 /
+    WC 2022 winners) rate as genuine 2026 contenders despite middling
+    World-Cup-only Elo. Avg goal difference per match → ±~45 Elo, so it nudges
+    the order without overriding it.
+    """
+    df = pd.read_sql("""
+        SELECT DISTINCT ON (team) team,
+               AVG(goals_scored - goals_conceded)
+                   OVER (PARTITION BY team, tournament_label) AS form,
+               kickoff_utc
+        FROM v_team_match_stats
+        ORDER BY team, kickoff_utc DESC
+    """, engine)
+    return {r["team"]: max(-45.0, min(45.0, float(r["form"]) * 25.0))
+            for _, r in df.iterrows() if pd.notna(r["form"])}
+
+
 def load_strengths() -> tuple[dict[str, list[GroupTeam]], dict[str, float]]:
-    """Build group→teams with blended strengths from Elo + FIFA rank."""
+    """Build group→teams with blended strengths from Elo + FIFA rank + form."""
     if not FJELSTUL_MATCHES.exists():
         logger.error("Fjelstul matches.csv missing. Run scripts/fetch_external_data.py")
         sys.exit(1)
@@ -52,6 +74,7 @@ def load_strengths() -> tuple[dict[str, list[GroupTeam]], dict[str, float]]:
     history["home_team_name"] = history["home_team_name"].map(canonicalize)
     history["away_team_name"] = history["away_team_name"].map(canonicalize)
     elo = build_from_history(history)
+    form = _recent_form_bonus()
 
     with get_session() as session:
         rows = session.execute(text("""
@@ -64,7 +87,7 @@ def load_strengths() -> tuple[dict[str, list[GroupTeam]], dict[str, float]]:
     groups: dict[str, list[GroupTeam]] = {}
     strengths: dict[str, float] = {}
     for name, group, fifa_rank in rows:
-        s = blended_strength(name, elo, fifa_rank)
+        s = blended_strength(name, elo, fifa_rank) + form.get(name, 0.0)
         strengths[name] = s
         groups.setdefault(group, []).append(GroupTeam(name=name, strength=s))
 
@@ -156,47 +179,77 @@ def ensure_predicted_bracket_table() -> None:
         conn.commit()
 
 
-def persist_predictions(result) -> None:
+def build_chalk_bracket(strengths: dict[str, float],
+                        groups: dict[str, list[GroupTeam]],
+                        structure: BracketStructure) -> dict[int, dict]:
     """
-    Persist the modal knockout bracket to predicted_bracket (the bracket-page
-    display). The per-match win/draw/loss predictions that v_model_scorecard
-    grades are owned by the trained model (scripts/predict_wc2026.py), so this
-    simulator stays out of the predictions table — one model, one scorecard.
+    A COHERENT "chalk" expected bracket: the stronger team advances at every
+    step, so the tree feeds through consistently and the strongest side lifts
+    the trophy (unlike the Monte Carlo modal bracket, where the single most
+    likely finalist pairing and the most likely champion can disagree, showing
+    a winner who isn't even in the displayed final).
+
+    Group slots resolve by strength: '1X'/'2X' = the top two of group X, the
+    eight best third-placed teams fill the '3…' slots. This is the favourites'
+    path — the honest *distribution* still lives in the advancement table.
     """
+    # Rank each group; collect third-placed teams for the best-thirds pool.
+    ranked = {g: sorted(ts, key=lambda t: -strengths[t.name]) for g, ts in groups.items()}
+    thirds = sorted((ranked[g][2] for g in ranked if len(ranked[g]) >= 3),
+                    key=lambda t: -strengths[t.name])
+    third_pool = iter([t.name for t in thirds[:8]])
+
+    def resolve(ph: str, winners: dict[int, str]) -> str | None:
+        s = str(ph or "")
+        m = re.match(r"^([12])([A-L])$", s)
+        if m:
+            idx = int(m.group(1)) - 1
+            grp = ranked.get(m.group(2), [])
+            return grp[idx].name if len(grp) > idx else None
+        if s.startswith("3"):
+            return next(third_pool, None)
+        w = re.match(r"^W(\d+)$", s)
+        if w:
+            return winners.get(int(w.group(1)))
+        return None
+
+    winners: dict[int, str] = {}
+    bracket: dict[int, dict] = {}
+    for num in sorted(structure.matches):
+        stage, hp, ap = structure.matches[num]
+        home = resolve(hp, winners)
+        away = resolve(ap, winners)
+        if not home or not away:
+            continue
+        sh, sa = strengths.get(home, 1500), strengths.get(away, 1500)
+        winner = home if sh >= sa else away
+        winners[num] = winner
+        from models.elo import EloModel
+        p_home = EloModel.expected_score(sh, sa)
+        bracket[num] = {"stage": stage, "home": home, "away": away,
+                        "winner": winner, "home_prob": p_home, "away_prob": 1 - p_home}
+    return bracket
+
+
+def persist_predictions(strengths, groups, structure) -> None:
+    """Persist the coherent chalk bracket to predicted_bracket (display feed)."""
+    import re as _re  # noqa: F401  (re already imported at module top)
     ensure_predicted_bracket_table()
-    bracket = result.modal_bracket()
-
+    bracket = build_chalk_bracket(strengths, groups, structure)
     with get_session() as session:
-        num_to_stage = {int(n): s for n, s in session.execute(text(
-            "SELECT fifa_match_num, stage FROM matches WHERE fifa_match_num IS NOT NULL"
-        )).fetchall()}
-
         session.execute(text("TRUNCATE predicted_bracket"))
-        written = 0
-        for mnum, slot in bracket.items():
-            if slot["winner"] is None:
-                continue
-            win_tally = result.slot_winner_tally.get(mnum, {})
-            total = sum(win_tally.values()) or 1
-            home_share = win_tally.get(slot["home"], 0) / total
-            away_share = win_tally.get(slot["away"], 0) / total
-            pair_tally = result.slot_pair_tally.get(mnum, {})
-            pairing_prob = (max(pair_tally.values()) / sum(pair_tally.values())
-                            if pair_tally else 0.0)
-
+        for num, slot in bracket.items():
             session.execute(text("""
                 INSERT INTO predicted_bracket
                     (fifa_match_num, stage, home_team, away_team, winner,
                      home_prob, away_prob, pairing_prob, model_version)
-                VALUES (:num, :stage, :home, :away, :winner,
-                        :hp, :ap, :pp, :mv)
-            """), {"num": mnum, "stage": num_to_stage.get(mnum),
-                   "home": slot["home"], "away": slot["away"],
-                   "winner": slot["winner"], "hp": round(home_share, 4),
-                   "ap": round(away_share, 4), "pp": round(pairing_prob, 4),
+                VALUES (:num, :stage, :home, :away, :winner, :hp, :ap, NULL, :mv)
+            """), {"num": num, "stage": slot["stage"], "home": slot["home"],
+                   "away": slot["away"], "winner": slot["winner"],
+                   "hp": round(slot["home_prob"], 4), "ap": round(slot["away_prob"], 4),
                    "mv": MODEL_VERSION})
-            written += 1
-    logger.info(f"Wrote modal bracket for {written} knockout matches.")
+    champ = bracket.get(104, {}).get("winner", "—")
+    logger.info(f"Wrote chalk bracket for {len(bracket)} matches. Predicted champion: {champ}")
 
 
 def main() -> None:
@@ -226,7 +279,7 @@ def main() -> None:
     result = sim.run(args.sims, seed=args.seed)
 
     persist_advancement(result, strengths)
-    persist_predictions(result)
+    persist_predictions(strengths, groups, structure)
 
     # Console summary: title favourites
     logger.info("── Title odds (top 10) ──")
