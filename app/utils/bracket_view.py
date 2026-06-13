@@ -24,6 +24,23 @@ from database.db import engine
 _W = re.compile(r"^W(\d+)$")
 LIME, DIM, BLACK, GOLD, RED = "#9BE800", "#3a5d12", "#0b0b1c", "#E8C547", "#E0003C"
 
+# Team name → flagcdn code (ISO-3166-1 alpha-2, plus GB subdivisions). Country
+# flag *emoji* don't render on Windows, so the bracket draws flag *images*.
+FLAG_ISO = {
+    "Algeria": "dz", "Argentina": "ar", "Australia": "au", "Austria": "at",
+    "Belgium": "be", "Bosnia & Herzegovina": "ba", "Brazil": "br", "Canada": "ca",
+    "Cape Verde": "cv", "Colombia": "co", "Croatia": "hr", "Curaçao": "cw",
+    "Czech Republic": "cz", "DR Congo": "cd", "Ecuador": "ec", "Egypt": "eg",
+    "England": "gb-eng", "France": "fr", "Germany": "de", "Ghana": "gh",
+    "Haiti": "ht", "Iran": "ir", "Iraq": "iq", "Ivory Coast": "ci", "Japan": "jp",
+    "Jordan": "jo", "Mexico": "mx", "Morocco": "ma", "Netherlands": "nl",
+    "New Zealand": "nz", "Norway": "no", "Panama": "pa", "Paraguay": "py",
+    "Portugal": "pt", "Qatar": "qa", "Saudi Arabia": "sa", "Scotland": "gb-sct",
+    "Senegal": "sn", "South Africa": "za", "South Korea": "kr", "Spain": "es",
+    "Sweden": "se", "Switzerland": "ch", "Tunisia": "tn", "Turkey": "tr",
+    "United States": "us", "Uruguay": "uy", "Uzbekistan": "uz",
+}
+
 # Canvas geometry
 CW, CH = 1040, 460          # viewBox
 COL_X_LEFT = [70, 196, 322, 440]      # R32, R16, QF, SF  (x-centres, left half)
@@ -129,17 +146,29 @@ def _col_x(stage: str, half: str) -> float:
     return COL_X_LEFT[idx] if half == "left" else COL_X_RIGHT[idx]
 
 
+def _flag_svg(team: str | None, x: float, y: float) -> str:
+    """A 16×12 flag image for a known team, or '' for a placeholder slot."""
+    iso = FLAG_ISO.get(team or "")
+    if not iso:
+        return ""
+    return (f'<image href="https://flagcdn.com/32x24/{iso}.png" '
+            f'x="{x}" y="{y}" width="16" height="12" preserveAspectRatio="xMidYMid slice"/>')
+
+
 def _box_svg(n: Node, tla: dict[str, str]) -> str:
     x, y = n.x - BOX_W / 2, n.y - BOX_H / 2
     win_home = n.winner_side == "home"
     win_away = n.winner_side == "away"
 
     def slot(ty: float, label: str, won: bool) -> str:
-        bg = LIME if won else "#11131f"
-        fg = BLACK if won else "#cfd3dc"
+        bg = LIME if won else "#15172a"
+        fg = BLACK if won else "#e6e8f2"
+        flag = _flag_svg(label, x + 6, ty + BOX_H / 4 - 6)
+        text_x = x + 26 if flag else x + 8
         return (f'<rect x="{x}" y="{ty}" width="{BOX_W}" height="{BOX_H/2}" rx="3" '
                 f'fill="{bg}" stroke="{DIM}" stroke-width="1"/>'
-                f'<text x="{x+7}" y="{ty+BOX_H/2-4}" fill="{fg}" '
+                f'{flag}'
+                f'<text x="{text_x}" y="{ty+BOX_H/2-4}" fill="{fg}" '
                 f'font-size="9" font-family="monospace" font-weight="bold">'
                 f'{_short(label, tla)}</text>')
 
@@ -187,28 +216,59 @@ def render_bracket_svg(kind: str) -> str:
                 n.x = _col_x(n.stage, half)
     final.x, final.y = FINAL_X, (nodes[sf_left].y + nodes[sf_right].y) / 2 if sf_left and sf_right else CH / 2
 
-    # Draw: connectors first (under), then boxes, then title.
+    # Draw order: hex background → connectors → boxes → labels/title.
     parts = [f'<svg viewBox="0 0 {CW} {CH}" xmlns="http://www.w3.org/2000/svg" '
+             f'xmlns:xlink="http://www.w3.org/1999/xlink" '
              f'style="width:100%;height:auto;background:{BLACK};'
              f'border:2px solid {LIME};border-radius:14px">']
+    # Hexagonal pitch texture
+    parts.append(
+        '<defs><pattern id="hex" width="34" height="30" patternUnits="userSpaceOnUse">'
+        '<path d="M8.5 0 L25.5 0 L34 15 L25.5 30 L8.5 30 L0 15 Z" '
+        f'fill="none" stroke="#15301a" stroke-width="1"/></pattern>'
+        f'<radialGradient id="glow" cx="50%" cy="50%" r="60%">'
+        f'<stop offset="0%" stop-color="#11251a"/><stop offset="100%" stop-color="{BLACK}"/>'
+        '</radialGradient></defs>')
+    parts.append(f'<rect width="{CW}" height="{CH}" fill="url(#glow)"/>')
+    parts.append(f'<rect width="{CW}" height="{CH}" fill="url(#hex)" opacity="0.7"/>')
+
     for num, n in nodes.items():
         for s in n.src:
             if s in nodes:
                 parts.append(_connector(nodes[s], n))
-    # connectors SF→Final
     for s in final.src:
         if s in nodes:
             parts.append(_connector(nodes[s], final))
     for n in nodes.values():
         parts.append(_box_svg(n, tla))
 
-    # Centre title
+    # Round labels across the top (mirrored), centred on each column.
+    def label(x: float, txt: str) -> str:
+        return (f'<text x="{x}" y="22" text-anchor="middle" fill="{LIME}" '
+                f'font-size="13" font-weight="800" font-style="italic" '
+                f'font-family="Arial, sans-serif" letter-spacing="0.5">{txt}</text>')
+    round_names = ["ROUND OF 32", "QUARTER-FINALS", "SEMI-FINALS", "SEMI-FINALS",
+                   "QUARTER-FINALS", "ROUND OF 32"]
+    # left R32, left QF, left SF, right SF, right QF, right R32
+    label_x = [COL_X_LEFT[0], COL_X_LEFT[2], COL_X_LEFT[3],
+               COL_X_RIGHT[3], COL_X_RIGHT[2], COL_X_RIGHT[0]]
+    for x, name in zip(label_x, round_names):
+        parts.append(label(x, name))
+    # R16 labels sit slightly lower so they don't collide with QF
+    parts.append(f'<text x="{COL_X_LEFT[1]}" y="40" text-anchor="middle" fill="{LIME}" '
+                 f'font-size="11" font-weight="700" font-style="italic">ROUND OF 16</text>')
+    parts.append(f'<text x="{COL_X_RIGHT[1]}" y="40" text-anchor="middle" fill="{LIME}" '
+                 f'font-size="11" font-weight="700" font-style="italic">ROUND OF 16</text>')
+    parts.append(f'<text x="{FINAL_X}" y="22" text-anchor="middle" fill="#fff" '
+                 f'font-size="15" font-weight="900" font-family="Arial Black, sans-serif" '
+                 f'letter-spacing="1">FINAL</text>')
+
+    # FIFA wordmark just below the final box
     parts.append(
-        f'<text x="{FINAL_X}" y="30" text-anchor="middle" fill="#fff" '
-        f'font-size="22" font-weight="900" font-family="Arial Black, sans-serif">FIFA</text>'
-        f'<text x="{FINAL_X}" y="46" text-anchor="middle" fill="{LIME}" '
-        f'font-size="12" font-style="italic" font-family="Georgia, serif">'
-        f"World Cup '26</text>")
+        f'<text x="{FINAL_X}" y="{CH-14}" text-anchor="middle" fill="#fff" '
+        f'font-size="18" font-weight="900" font-family="Arial Black, sans-serif">FIFA '
+        f'<tspan fill="{LIME}" font-style="italic" font-weight="700" '
+        f'font-family="Georgia, serif" font-size="13">World Cup ’26</tspan></text>')
     parts.append("</svg>")
     return "".join(parts)
 

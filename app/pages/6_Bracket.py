@@ -164,20 +164,47 @@ st.divider()
 # ════════════════════════════════════════════════════════════════════════════
 # 3. Knockout bracket tree — Expected vs Actual, self-updating
 # ════════════════════════════════════════════════════════════════════════════
+import streamlit.components.v1 as components  # noqa: E402
+
 from app.utils.bracket_view import render_bracket_svg  # noqa: E402
 
 st.subheader("🗺️ Knockout bracket")
 st.caption("Left: the model's expected path. Right: how it's actually playing out. "
            "Auto-refreshes every 60 seconds as results land.")
 
+# Model's headline call — the prediction explicitly revolves around this.
+champ = adv.iloc[0]
+usa = adv[adv["team"] == "United States"]
+if not usa.empty:
+    usa_row = usa.iloc[0]
+    st.markdown(f"""
+    <div style="background:linear-gradient(90deg,#1A1A2E,#14142B);border:1px solid #E0003C;
+                border-left:5px solid #E0003C;border-radius:10px;padding:.7rem 1rem;margin:.4rem 0;">
+      <span style="color:#E0003C;font-weight:800;letter-spacing:.04em">📌 MODEL CALL</span>
+      &nbsp;—&nbsp;<b style="color:#FAFAFA">{champ['team']}</b> are the predicted champions
+      (<b style="color:#9BE800">{champ['won_cup']*100:.1f}%</b>).
+      The host <b style="color:#FAFAFA">USA</b> is <b>not winning this</b>: a
+      <b style="color:#E8C547">{usa_row['won_cup']*100:.1f}%</b> title shot with a ceiling
+      around the <b>semifinals</b> ({usa_row['reached_sf']*100:.0f}% to reach them) — the
+      model has them eliminated before the final.
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def _bracket_iframe(kind: str):
+    svg = render_bracket_svg(kind)
+    components.html(
+        f'<div style="background:#0b0b1c;margin:0">{svg}</div>',
+        height=480, scrolling=False)
+
 
 @st.fragment(run_every=60)
 def bracket_tree():
     exp_tab, act_tab = st.tabs(["🔮 Expected (model)", "⚽ Actual (live)"])
     with exp_tab:
-        st.markdown(render_bracket_svg("expected"), unsafe_allow_html=True)
+        _bracket_iframe("expected")
     with act_tab:
-        st.markdown(render_bracket_svg("actual"), unsafe_allow_html=True)
+        _bracket_iframe("actual")
         st.caption("Empty slots show qualification codes (e.g. 2A = Group A runner-up, "
                    "W73 = winner of match 73) until teams resolve.")
 
