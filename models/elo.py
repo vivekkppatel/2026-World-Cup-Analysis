@@ -165,10 +165,12 @@ _FIFA_TOP_ELO = 1850.0
 _FIFA_ELO_PER_RANK = 5.5
 
 # WC-only Elo never regresses between tournaments, so teams with deep but dated
-# history (e.g. Sweden, USA) carry stale, inflated ratings. Capping the Elo
-# weight keeps a permanent floor of trust in the *current* FIFA rank, which
-# counters that staleness no matter how many WC games a team has played.
-_MAX_ELO_WEIGHT = 0.75
+# history (e.g. Sweden, USA) carry stale, inflated ratings — the host nations
+# especially, who bank Elo from hosting without being current powers. Current
+# FIFA ranking is the better read on present strength, so it carries the
+# majority of the weight; historical Elo is a minority adjustment. This both
+# improves realism and stops the host (USA, FIFA #16) from topping the odds.
+_MAX_ELO_WEIGHT = 0.40
 
 
 def fifa_rank_to_elo(rank: int) -> float:

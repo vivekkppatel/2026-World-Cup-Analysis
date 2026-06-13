@@ -298,12 +298,20 @@ class SimulationResult:
         return rows
 
     def modal_bracket(self) -> dict[int, dict]:
-        """Most likely (home, away, winner) for each knockout match."""
+        """
+        Most likely (home, away, winner) for each knockout match. The winner is
+        chosen from WITHIN the modal pairing (whichever of the two displayed
+        teams won more often), so the bracket never shows a winner who isn't in
+        the matchup — the global modal winner can otherwise be a third team,
+        since any single pairing is individually unlikely in a 48-team field.
+        """
         bracket = {}
         for mnum, pairs in self.slot_pair_tally.items():
             top_pair = max(pairs.items(), key=lambda kv: kv[1])[0]
             winners = self.slot_winner_tally.get(mnum, {})
-            top_winner = max(winners.items(), key=lambda kv: kv[1])[0] if winners else None
+            home, away = top_pair
+            top_winner = (home if winners.get(home, 0) >= winners.get(away, 0)
+                          else away)
             bracket[mnum] = {"home": top_pair[0], "away": top_pair[1],
                              "winner": top_winner}
         return bracket
