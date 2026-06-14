@@ -206,14 +206,28 @@ def teams():
         "SELECT name FROM teams WHERE group_name IS NOT NULL ORDER BY name")]
 
 
+def _form_deltas() -> dict:
+    """Current-form Elo adjustments per team (from scripts/refresh_form.py)."""
+    try:
+        return {r["team_name"]: {"delta": float(r["elo_delta"] or 0),
+                                 "gd_pg": r["gd_pg"], "win_rate": r["win_rate"],
+                                 "matches": r["matches"]}
+                for r in _rows("SELECT * FROM team_recent_form")}
+    except Exception:
+        return {}   # table not created yet (form never refreshed)
+
+
 @app.get("/api/match-predict")
 def match_predict(home: str, away: str, knockout: bool = False):
     from models.match_poisson import predict_match
     from scripts.predict_wc2026 import make_features
 
     strengths = _strengths()
-    sh = strengths.get(home, 1700.0)
-    sa = strengths.get(away, 1700.0)
+    forms = _form_deltas()
+    # Fold competition-weighted recent form into each team's strength.
+    fh, fa = forms.get(home, {}), forms.get(away, {})
+    sh = strengths.get(home, 1700.0) + fh.get("delta", 0.0)
+    sa = strengths.get(away, 1700.0) + fa.get("delta", 0.0)
 
     # Optional LogReg probabilities to blend with the Poisson grid.
     logreg = None
@@ -227,4 +241,7 @@ def match_predict(home: str, away: str, knockout: bool = False):
         pass  # model not trained / team missing → Poisson stands alone
 
     pred = predict_match(home, away, sh, sa, logreg_probs=logreg)
-    return asdict(pred)
+    return {**asdict(pred), "form": {
+        "home": fh or None, "away": fa or None,
+        "applied": bool(forms),  # True once refresh_form has run with a key
+    }}

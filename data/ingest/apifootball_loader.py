@@ -127,6 +127,46 @@ class ApiFootballLoader:
         logger.info("API-Football: %d fixtures (%d finished).", len(df), finished)
         return df
 
+    def get_team_ids(self) -> dict[str, int]:
+        """
+        Map canonical team name → API-Football team id, from the WC 2026
+        fixtures (one request). Needed to pull each team's recent form.
+        """
+        raw = self._get("fixtures", {"league": WORLD_CUP_LEAGUE_ID, "season": SEASON})
+        ids: dict[str, int] = {}
+        for fx in raw:
+            for side in ("home", "away"):
+                t = fx["teams"][side]
+                ids[canonicalize(t["name"])] = t["id"]
+        return ids
+
+    def get_recent_matches(self, team_id: int, last: int = 20) -> list[dict]:
+        """
+        A team's last `last` FINISHED matches across all competitions, as
+        rows of {gf, ga, league, date} — the input to models.recent_form.
+        One request per team.
+        """
+        raw = self._get("fixtures", {"team": team_id, "last": last})
+        rows = []
+        for fx in raw:
+            if fx["fixture"].get("status", {}).get("short") not in _FINISHED:
+                continue
+            gh, ga = fx["goals"].get("home"), fx["goals"].get("away")
+            if gh is None or ga is None:
+                continue
+            is_home = fx["teams"]["home"]["id"] == team_id
+            try:
+                d = datetime.fromisoformat(fx["fixture"]["date"]).date()
+            except (ValueError, KeyError, TypeError):
+                continue
+            rows.append({
+                "gf": gh if is_home else ga,
+                "ga": ga if is_home else gh,
+                "league": (fx.get("league") or {}).get("name", ""),
+                "date": d,
+            })
+        return rows
+
     def get_top_scorers(self, limit: int = 20) -> pd.DataFrame:
         raw = self._get("players/topscorers",
                         {"league": WORLD_CUP_LEAGUE_ID, "season": SEASON})

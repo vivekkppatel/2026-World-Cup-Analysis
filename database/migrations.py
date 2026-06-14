@@ -63,6 +63,23 @@ _UPGRADES = [
     "ALTER TABLE players ADD COLUMN IF NOT EXISTS fjelstul_id VARCHAR(20)",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_players_fjelstul ON players (fjelstul_id)",
 
+    # Competition-weighted, recency-decayed recent form per team, pulled from
+    # API-Football (scripts/refresh_form.py). elo_delta nudges the match
+    # predictor's expected goals; the raw stats are kept for display.
+    """
+    CREATE TABLE IF NOT EXISTS team_recent_form (
+        team_name   VARCHAR(100) PRIMARY KEY,
+        win_rate    NUMERIC(5,4),
+        gf_pg       NUMERIC(5,3),
+        ga_pg       NUMERIC(5,3),
+        gd_pg       NUMERIC(5,3),
+        pts_pg      NUMERIC(5,3),
+        matches     SMALLINT,
+        elo_delta   NUMERIC(6,2),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+
     # Pre-tournament player form snapshot (Kaggle "Road to 2026" dataset).
     # Separate table: this is club/NT form BEFORE the tournament, not
     # per-match tournament output — joining it to CPCS later answers

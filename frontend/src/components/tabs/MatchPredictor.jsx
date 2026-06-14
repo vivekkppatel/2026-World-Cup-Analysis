@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Swords, Target, Grid3x3, Layers } from 'lucide-react'
+import { Swords, Target, Grid3x3, Layers, Activity } from 'lucide-react'
 import { Card, Flag } from '../ui.jsx'
 import { getTeams, getMatchPredict } from '../../data/api.js'
 
@@ -193,6 +193,37 @@ export default function MatchPredictor() {
               hedges each model's blind spots — Poisson captures goal distributions, the LogReg captures
               learned form patterns.
             </p>
+          </Card>
+
+          {/* Competition-weighted recent form (API-Football enrichment) */}
+          <Card title="Current form" subtitle="Last 20 matches · competition-weighted, recency-decayed" icon={Activity} accent="gold">
+            {pred.form?.applied ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[{ t: home, f: pred.form.home }, { t: away, f: pred.form.away }].map(({ t, f }) => (
+                  <div key={t} className="flex items-center justify-between rounded-xl bg-turf-50 px-4 py-3">
+                    <span className="flex items-center gap-2 font-semibold text-turf-900">
+                      <Flag team={t} w={22} /> {t}
+                    </span>
+                    {f ? (
+                      <span className="text-right text-xs text-turf-700">
+                        <div>GD/game <b>{f.gd_pg > 0 ? '+' : ''}{f.gd_pg}</b> · win {Math.round((f.win_rate || 0) * 100)}%</div>
+                        <div className={f.delta >= 0 ? 'text-turf-600' : 'text-wc-red'}>
+                          strength nudge {f.delta >= 0 ? '+' : ''}{f.delta} Elo
+                        </div>
+                      </span>
+                    ) : <span className="text-xs text-turf-600/60">no recent data</span>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-turf-700">
+                Recent-form enrichment is <b>off</b>. Add an{' '}
+                <a href="https://www.api-football.com/" className="text-wc-purple underline" target="_blank" rel="noreferrer">API-Football</a>{' '}
+                key to <code className="rounded bg-turf-100 px-1">.env</code> and run{' '}
+                <code className="rounded bg-turf-100 px-1">python scripts/refresh_form.py</code> —
+                the predictor will then fold each team's competition-weighted recent form into its strength.
+              </p>
+            )}
           </Card>
         </>
       )}
