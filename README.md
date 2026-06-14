@@ -92,6 +92,18 @@ pipeline** (a test fails if any feature ever depends on the match it
 describes), position classification, team-name canonicalization, and the
 Monte Carlo bracket. No database or network needed.
 
+## Learning guides
+
+Teaching-oriented walkthroughs of how this project was built — useful whether you're learning analytics or explaining the project in an interview:
+
+| Guide | What it teaches |
+|---|---|
+| [docs/DATA_CLEANING_SQL.md](docs/DATA_CLEANING_SQL.md) | How the messy 4-source data was cleaned with SQL — entity resolution, dedup, upserts, NULL handling, views, window functions (8 transferable skills) |
+| [docs/BI_SETUP.md](docs/BI_SETUP.md) | Connecting Tableau & Power BI to the views, **plus a click-by-click recipe** to build the xG-vs-goals dashboard |
+| [notebooks/02_eda_worked.ipynb](notebooks/02_eda_worked.ipynb) | A **fully worked EDA** against the live database — distributions, xG analysis, the small-sample trap, correlation, and how to write up insights |
+| [notebooks/01_eda_worldcup.ipynb](notebooks/01_eda_worldcup.ipynb) | A guided EDA with TODOs for *you* to solve (do this after `02`) |
+| [docs/LEARNING_PATH.md](docs/LEARNING_PATH.md) | The 8-module curriculum tying it all together |
+
 ## Project Structure
 
 ```

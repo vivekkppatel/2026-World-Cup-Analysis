@@ -85,3 +85,38 @@ LIMIT 10;
 ## Also worth importing into BI directly
 
 The Fjelstul historical CSVs (`python scripts/fetch_external_data.py` → `data/external/fjelstul/`) cover **every World Cup 1930–2022**. Tableau and Power BI both read CSVs natively — `matches.csv` (1,248 matches) makes a great "92 years of World Cup history" dashboard without touching the database.
+
+---
+
+## Build your first dashboard — step by step
+
+Theory is cheap; building one is what teaches you. Here's a complete, click-by-click recipe for **the xG-vs-goals "finishing" dashboard** — the single most impressive thing to show in an interview, because it demonstrates you think about *performance vs. a model baseline*, not raw totals. Pick your tool:
+
+### Tableau (≈15 minutes)
+
+1. **Connect** to PostgreSQL (details above) → drag the **`v_player_stats`** view to the canvas → go to **Sheet 1**.
+2. **Filter to a real sample.** Drag `Tournament Label` to **Filters** → pick `WC 2022`. Drag `Minutes` to Filters → set **At least 270** (kills small-sample noise — see the EDA notebook, §5).
+3. **Build the scatter:**
+   - Drag **`Xg`** to **Columns**, **`Goals`** to **Rows**. Both will aggregate — right-click each pill → **Dimension** isn't right here; instead set each to **AVG** off, use **Measure → (the raw value)**. Simplest: right-click the `Xg`/`Goals` pills → **Measure → Sum**, then drag **`Player`** to **Detail** (this makes one dot per player).
+   - You now have a scatter of players: xG on the x-axis, goals on the y.
+4. **Add the reference diagonal** (the "as expected" line): right-click the x-axis → **Add Reference Line** → choose a **constant** won't work for a diagonal, so instead create a calculated field **`Expected = [Xg]`** and plot it as a line, *or* (easier) just add a trend line: **Analytics tab → Trend Line → Linear**. Points above the trend = over-performers.
+5. **Make it readable:** drag **`Team`** to **Color**, **`Player`** to **Label**. Drag **`Goals`-minus-`Xg`** (make a calculated field `Over = [Goals] - [Xg]`) to **Size** so the biggest over-performers pop.
+6. **Title it** "Finishing: who beats their xG?" → **Dashboard → New Dashboard** → drag the sheet in. Publish to **Tableau Public** for a portfolio link (remember: Public makes data public — fine here, all open data).
+
+**What it shows an interviewer:** a calculated field (`Goals - Xg`), a meaningful filter (min minutes), and a point of view (over/under-performance). That's analyst thinking, not just charting.
+
+### Power BI (≈15 minutes)
+
+1. **Get Data → PostgreSQL** → server `localhost`, database `worldcup2026` → **Import** → select **`v_player_stats`** → **Load**.
+2. **Add the over-performance measure.** In the **Data** pane right-click the table → **New measure**:
+   ```DAX
+   Over Performance = SUM(v_player_stats[goals]) - SUM(v_player_stats[xg])
+   ```
+3. **Scatter chart:** Visualizations → **Scatter chart**. Set **X Axis = `xg`** (Sum), **Y Axis = `goals`** (Sum), **Values/Details = `player`** (one bubble per player), **Size = `Over Performance`**, **Legend = `team`**.
+4. **Filter the noise:** drag `tournament_label` to **Filters** → `WC 2022`; drag `minutes` to Filters → **is greater than or equal to 270**.
+5. **Add the y = x reference:** select the visual → **Analytics pane (the magnifying-glass icon)** → there's no built-in diagonal, so add a **trend line** instead → bubbles above it are the clinical finishers.
+6. **Title** it, add a **card** visual showing the top `Over Performance` player, and you have a one-screen story. **Publish** to Power BI Service for a shareable link.
+
+**KPI dashboard idea (either tool):** a second page with the `v_model_scorecard` view — a **card** for overall hit rate, a **gauge** for Brier score, and a **line chart** of accuracy by round. That's your "model performance" page, the finance-style track record.
+
+> **The habit to build:** every dashboard should answer *one question* and have *one point of view*. "Goals by team" is a report; "who finishes above expectation" is an analysis. Aim for the second.
