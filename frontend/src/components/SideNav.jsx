@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion'
-import { Trophy, Shield, Network, Settings } from 'lucide-react'
+import { Trophy, Swords, Shield, Network, Settings } from 'lucide-react'
 
 export const TABS = [
   { id: 'predictions', label: 'Predictions', icon: Trophy },
+  { id: 'match', label: 'Match Predictor', icon: Swords },
   { id: 'teams', label: 'Team Stats', icon: Shield },
   { id: 'bracket', label: 'Bracket', icon: Network },
   { id: 'settings', label: 'Info', icon: Settings },

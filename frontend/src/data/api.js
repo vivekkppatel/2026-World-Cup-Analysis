@@ -61,6 +61,18 @@ export const getTopScorers = () =>
     { player: 'Julián Álvarez', team: 'Argentina', goals: 4, xg: 1.9 },
   ])
 
+export const getTeams = () =>
+  get('/api/teams', ['Argentina', 'Brazil', 'England', 'France', 'Germany', 'Netherlands', 'Portugal', 'Senegal', 'Spain', 'United States'])
+
+export const getMatchPredict = (home, away, knockout = false) =>
+  get(`/api/match-predict?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}&knockout=${knockout}`, {
+    home, away, exp_home_goals: 1.5, exp_away_goals: 1.1,
+    home_win: 0.5, draw: 0.25, away_win: 0.25,
+    top_scorelines: [{ score: '1-1', prob: 0.09 }, { score: '1-0', prob: 0.08 }, { score: '2-1', prob: 0.07 }],
+    grid: [[0.06, 0.05, 0.02], [0.08, 0.09, 0.04], [0.05, 0.06, 0.03]],
+    components: { poisson: { home: 0.46, draw: 0.25, away: 0.29 }, logreg: { home: 0.55, draw: 0.25, away: 0.20 } },
+  })
+
 export const getBracket = () =>
   get('/api/bracket', {
     left: {

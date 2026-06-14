@@ -13,6 +13,8 @@ Run:
     uvicorn api.main:app --reload --port 8000
 """
 import sys
+from dataclasses import asdict
+from functools import lru_cache
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -181,3 +183,48 @@ def fixtures(limit: int = 12):
                to_char(kickoff_utc, 'Mon DD · HH24:MI') || ' UTC' AS kickoff
         FROM v_upcoming_fixtures LIMIT :lim
     """, {"lim": limit})
+
+
+# ── Single-match predictor (Poisson scoreline ⊕ LogReg blend) ────────────────
+@lru_cache(maxsize=1)
+def _strengths() -> dict:
+    return {r["team_name"]: float(r["strength"])
+            for r in _rows("SELECT team_name, strength FROM team_advancement")}
+
+
+@lru_cache(maxsize=1)
+def _logreg_bundle():
+    """Trained match model + per-team Elo/rank/form features (cached once)."""
+    from models.match_predictor import MatchPredictor, MODEL_PATH
+    from scripts.predict_wc2026 import load_team_features
+    return MatchPredictor.from_disk(MODEL_PATH), load_team_features()
+
+
+@app.get("/api/teams")
+def teams():
+    return [r["name"] for r in _rows(
+        "SELECT name FROM teams WHERE group_name IS NOT NULL ORDER BY name")]
+
+
+@app.get("/api/match-predict")
+def match_predict(home: str, away: str, knockout: bool = False):
+    from models.match_poisson import predict_match
+    from scripts.predict_wc2026 import make_features
+
+    strengths = _strengths()
+    sh = strengths.get(home, 1700.0)
+    sa = strengths.get(away, 1700.0)
+
+    # Optional LogReg probabilities to blend with the Poisson grid.
+    logreg = None
+    try:
+        model, feats = _logreg_bundle()
+        h, a = feats.get(home), feats.get(away)
+        if h and a:
+            p = model.predict_one(make_features(h, a, int(knockout)))
+            logreg = {"home": p["HOME_WIN"], "draw": p["DRAW"], "away": p["AWAY_WIN"]}
+    except Exception:
+        pass  # model not trained / team missing → Poisson stands alone
+
+    pred = predict_match(home, away, sh, sa, logreg_probs=logreg)
+    return asdict(pred)

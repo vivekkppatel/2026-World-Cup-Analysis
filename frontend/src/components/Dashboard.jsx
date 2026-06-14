@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import SideNav from './SideNav.jsx'
 import Predictions from './tabs/Predictions.jsx'
+import MatchPredictor from './tabs/MatchPredictor.jsx'
 import TeamStats from './tabs/TeamStats.jsx'
 import BracketSim from './tabs/BracketSim.jsx'
 import SettingsTab from './tabs/SettingsTab.jsx'
 
 const TAB_COMPONENTS = {
   predictions: Predictions,
+  match: MatchPredictor,
   teams: TeamStats,
   bracket: BracketSim,
   settings: SettingsTab,
@@ -15,6 +17,7 @@ const TAB_COMPONENTS = {
 
 const TAB_TITLES = {
   predictions: 'Predictions & Simulation',
+  match: 'Match Predictor',
   teams: 'Team Statistics',
   bracket: 'Bracket Simulator',
   settings: 'Platform Info',
