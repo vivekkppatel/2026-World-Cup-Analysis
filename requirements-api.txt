@@ -1,0 +1,13 @@
+# Lean dependencies for the deployed FastAPI backend (api/main.py).
+# The full requirements.txt (Streamlit, StatsBomb, Kaggle, matplotlib …) is for
+# local data work; the production API only needs these.
+fastapi>=0.110
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0.36
+psycopg2-binary>=2.9.10
+pandas>=2.3
+numpy>=2.1
+scikit-learn>=1.7
+scipy>=1.14
+requests>=2.32
+python-dotenv>=1.0

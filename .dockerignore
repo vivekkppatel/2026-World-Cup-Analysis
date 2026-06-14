@@ -1,0 +1,15 @@
+venv/
+frontend/
+notebooks/
+tests/
+outputs/
+__pycache__/
+*.pyc
+.env
+.git/
+.claude/
+data/external/
+data/raw/
+*.ipynb
+docs/
+app/
