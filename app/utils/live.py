@@ -27,11 +27,13 @@ def ensure_live_data(_bucket: int = 0) -> dict:
     status = {"ok": False, "finished": 0, "error": None}
     try:
         from scripts.refresh_live import (
-            refresh_from_openfootball, refresh_from_football_data)
+            refresh_from_openfootball, refresh_from_apifootball,
+            refresh_from_football_data)
         from database.db import engine
         import pandas as pd
 
         refresh_from_openfootball()
+        refresh_from_apifootball()   # live scores (API-Football, if key set)
         refresh_from_football_data()
         n = pd.read_sql(
             "SELECT COUNT(*) AS n FROM matches "

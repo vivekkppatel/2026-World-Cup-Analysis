@@ -19,6 +19,10 @@ requests>=2.32
 statsbombpy>=1.13.0
 kagglehub>=0.3
 
+# Backend API (serves the React frontend)
+fastapi>=0.110
+uvicorn[standard]>=0.30
+
 # ML
 scikit-learn>=1.7
 joblib>=1.4

@@ -145,6 +145,63 @@ def refresh_from_openfootball() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# API-Football → live scores (primary live source; requires APIFOOTBALL_KEY)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def refresh_from_apifootball() -> None:
+    """
+    Pull live WC 2026 scores from API-Football and update the matches table.
+
+    API-Football is the real-time provider: openfootball seeds the fixtures,
+    this overlays live scores/status onto them. Matches are matched by the
+    canonicalised (home, away) team pair within WC 2026, so only fixtures
+    whose teams are already known (group stage, and knockouts once resolved)
+    get updated — exactly the ones that can have a score.
+    """
+    from data.ingest.apifootball_loader import ApiFootballLoader, ApiFootballConfigError
+    try:
+        loader = ApiFootballLoader()
+    except ApiFootballConfigError as e:
+        logger.info(f"API-Football not configured — skipping live scores. ({e})")
+        return
+
+    try:
+        fixtures = loader.get_fixtures()
+    except Exception as e:
+        logger.error(f"API-Football fetch failed: {e}")
+        return
+    if fixtures.empty:
+        logger.info("API-Football returned no WC 2026 fixtures yet.")
+        return
+
+    with get_session() as session:
+        name_to_id = {n: i for n, i in
+                      session.execute(text("SELECT name, id FROM teams")).fetchall()}
+        updated = 0
+        for _, fx in fixtures.iterrows():
+            if fx["status"] == "SCHEDULED":
+                continue  # nothing to write until there's a score/kickoff
+            hid = name_to_id.get(fx["home_team_name"])
+            aid = name_to_id.get(fx["away_team_name"])
+            if hid is None or aid is None:
+                continue
+            res = session.execute(text("""
+                UPDATE matches SET
+                    home_score = :hs, away_score = :aws,
+                    status = :status, winner = :winner, updated_at = NOW()
+                WHERE tournament_label = 'WC 2026'
+                  AND home_team_id = :hid AND away_team_id = :aid
+            """), {
+                "hs": None if pd.isna(fx["home_score"]) else int(fx["home_score"]),
+                "aws": None if pd.isna(fx["away_score"]) else int(fx["away_score"]),
+                "status": fx["status"], "winner": fx["winner"],
+                "hid": hid, "aid": aid,
+            })
+            updated += res.rowcount
+    logger.info(f"API-Football: updated {updated} live matches.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # football-data.org → standings (requires API key)
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -219,8 +276,9 @@ def main() -> None:
         sys.exit(1)
 
     ensure_schema_upgrades()
-    refresh_from_openfootball()
-    refresh_from_football_data()
+    refresh_from_openfootball()    # seeds all 104 fixtures + teams
+    refresh_from_apifootball()     # overlays live scores (primary live source)
+    refresh_from_football_data()   # official standings (optional)
     logger.info("✅ Refresh complete.")
 
 

@@ -67,7 +67,7 @@ export default function TeamStats() {
                 <td className="py-2.5 text-right font-bold tabular-nums text-wc-purple">{t.titleOdds}%</td>
                 <td className="py-2.5 text-right">
                   <span className="inline-flex gap-1">
-                    {t.recentForm.split(' ').map((r, i) => (
+                    {(t.recentForm ? t.recentForm.split(' ') : []).map((r, i) => (
                       <span
                         key={i}
                         className={`grid h-5 w-5 place-items-center rounded-full text-[10px] font-bold text-white
@@ -76,6 +76,7 @@ export default function TeamStats() {
                         {r}
                       </span>
                     ))}
+                    {!t.recentForm && <span className="text-xs text-turf-600/60">—</span>}
                   </span>
                 </td>
               </tr>
