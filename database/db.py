@@ -15,6 +15,21 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/worldcup2026")
 
+
+def _require_ssl(url: str) -> str:
+    """
+    Managed Postgres (Supabase, Neon, Render, …) requires TLS. Append
+    sslmode=require for remote hosts that don't already specify it; leave
+    localhost alone so local dev keeps working without certs.
+    """
+    if "sslmode=" in url or "localhost" in url or "127.0.0.1" in url:
+        return url
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}sslmode=require"
+
+
+DATABASE_URL = _require_ssl(DATABASE_URL)
+
 # ── Engine ────────────────────────────────────────────────────────────────────
 engine = create_engine(
     DATABASE_URL,

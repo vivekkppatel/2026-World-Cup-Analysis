@@ -22,43 +22,54 @@ git push -u origin main
 
 ---
 
-## Step 1 — A cloud PostgreSQL, populated with your data
+## Step 1 — Supabase PostgreSQL, populated with your data
 
-**Create the database [you]:** the simplest is [Neon](https://neon.tech) (free,
-generous) or a Render PostgreSQL (free 90 days). Either gives you a
-**connection string** like `postgresql://user:pass@host/db`.
+**Create the database [you]:** at [supabase.com](https://supabase.com) → New
+Project. Once it's up: **Project Settings → Database → Connection string →
+URI**. It looks like:
 
-**Populate it — fastest path (copy your local DB up):**
+```
+postgresql://postgres:[YOUR-PASSWORD]@db.<ref>.supabase.co:5432/postgres
+```
 
-```bash
-# 1) dump your local, fully-loaded database
-& "C:\Program Files\PostgreSQL\18\bin\pg_dump.exe" -U postgres worldcup2026 -Fc -f wc2026.dump
+Supabase requires SSL, so the app appends `?sslmode=require` automatically when
+the host contains `supabase`. Use the **direct connection** (port 5432) for the
+Render backend.
 
-# 2) restore into the cloud DB (paste your cloud connection string)
-& "C:\Program Files\PostgreSQL\18\bin\pg_restore.exe" --no-owner --clean \
-    -d "postgresql://user:pass@host/db" wc2026.dump
+**Populate it — fastest path (copy your local DB up):** the dump is already
+generated (`wc2026.dump`, ~280 KB). Restore it into Supabase with your local
+PG18 `pg_restore` (drop `--clean`, add `--no-acl` for Supabase's roles):
+
+```powershell
+& "C:\Program Files\PostgreSQL\18\bin\pg_restore.exe" --no-owner --no-acl `
+    -d "postgresql://postgres:PWD@db.<ref>.supabase.co:5432/postgres" wc2026.dump
 ```
 
 This copies up the teams, matches, predictions, bracket, and all the `v_*`
-views in one shot — no re-downloading StatsBomb. *(Alternative: set
-`DATABASE_URL` to the cloud string locally and re-run the pipeline from
-README step 5–7 — slower, but no pg_dump needed.)*
+views in one shot — no re-downloading StatsBomb. *(If a cross-version restore
+errors, the fallback is to set `DATABASE_URL` to the Supabase URI locally and
+re-run the pipeline from README step 5–7.)*
+
+> To re-create the dump later: `python scripts/make_dump.py` (or the pg_dump
+> command in that script).
 
 ---
 
-## Step 2 — Deploy the backend API
+## Step 2 — Deploy the backend API on Render
 
-**Option A — Render Blueprint (one click, recommended):**
-On [Render](https://render.com) **[you]**: New → **Blueprint** → connect the
-repo. It reads [`render.yaml`](../render.yaml) and creates the API + a Postgres
-+ the static frontend together. Then set the secret `APIFOOTBALL_KEY` in the
-dashboard. *(If you populated your own Neon DB in Step 1, point the API's
-`DATABASE_URL` at it instead of the blueprint's database.)*
+On [Render](https://render.com) **[you]**: New → **Web Service** → connect the
+repo → it detects the [`Dockerfile`](../Dockerfile). Set two environment
+variables:
 
-**Option B — Railway / Fly / Cloud Run:** they build the [`Dockerfile`](../Dockerfile)
-directly. Set two env vars: `DATABASE_URL` (your cloud DB) and `APIFOOTBALL_KEY`.
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | your Supabase URI from Step 1 |
+| `APIFOOTBALL_KEY` | your API-Football key |
 
-Verify: open `https://your-api.onrender.com/api/health` → `{"ok":true}`.
+Deploy, then verify: `https://your-api.onrender.com/api/health` → `{"ok":true}`.
+
+> *(The `render.yaml` blueprint is for the all-in-one path; for this
+> Supabase + Vercel setup you only need the single web service above.)*
 
 > The match-predictor's LogReg blend needs `models/match_predictor.pkl` (a
 > gitignored build artifact). Without it the predictor still works (Poisson

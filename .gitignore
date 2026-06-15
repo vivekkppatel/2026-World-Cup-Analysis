@@ -39,3 +39,6 @@ desktop.ini
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Database dumps
+*.dump
