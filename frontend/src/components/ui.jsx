@@ -49,7 +49,7 @@ export function Card({ title, subtitle, icon: Icon, children, className = '', ac
   )
 }
 
-export function StatCard({ label, value, sub, accent = 'turf' }) {
+export function StatCard({ label, value, sub, accent = 'turf', flag }) {
   const color = {
     turf: 'text-turf-800', purple: 'text-wc-purple', red: 'text-wc-red', gold: 'text-[#b8950f]',
   }[accent]
@@ -59,7 +59,10 @@ export function StatCard({ label, value, sub, accent = 'turf' }) {
       className="rounded-2xl bg-white/85 p-4 shadow-card ring-1 ring-turf-800/10"
     >
       <div className="text-xs font-semibold uppercase tracking-wide text-turf-600/80">{label}</div>
-      <div className={`mt-1 font-display text-2xl ${color}`}>{value}</div>
+      <div className={`mt-1 flex items-center gap-2 font-display text-2xl ${color}`}>
+        {flag && <Flag team={flag} w={26} />}
+        {value}
+      </div>
       {sub && <div className="mt-0.5 text-xs text-turf-600/70">{sub}</div>}
     </motion.div>
   )

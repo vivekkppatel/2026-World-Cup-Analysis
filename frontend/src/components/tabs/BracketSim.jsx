@@ -75,7 +75,7 @@ export default function BracketSim() {
               <Slot team={b.final.away} won={b.final.winner === b.final.away} />
             </motion.div>
             <div className="flex items-center gap-1.5 rounded-full bg-wc-purple px-3 py-1 text-xs font-bold text-white">
-              <Trophy className="h-3 w-3" /> {b.final.winner}
+              <Trophy className="h-3 w-3" /> <Flag team={b.final.winner} w={16} /> {b.final.winner}
             </div>
           </div>
 

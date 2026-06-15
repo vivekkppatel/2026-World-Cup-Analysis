@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import SideNav from './SideNav.jsx'
+import { Flag } from './ui.jsx'
 import Predictions from './tabs/Predictions.jsx'
 import MatchPredictor from './tabs/MatchPredictor.jsx'
 import TeamStats from './tabs/TeamStats.jsx'
@@ -37,8 +38,11 @@ export default function Dashboard() {
             <h1 className="font-display text-2xl leading-none text-turf-900">
               WORLD CUP <span className="text-wc-purple">26</span>
             </h1>
-            <p className="text-xs font-medium uppercase tracking-widest text-turf-600">
-              Predictive Analyzer · USA · Canada · Mexico
+            <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-widest text-turf-600">
+              Predictive Analyzer ·
+              <Flag team="United States" w={18} />
+              <Flag team="Canada" w={18} />
+              <Flag team="Mexico" w={18} />
             </p>
           </div>
         </div>

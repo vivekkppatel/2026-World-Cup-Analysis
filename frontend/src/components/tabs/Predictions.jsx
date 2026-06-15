@@ -45,8 +45,8 @@ export default function Predictions() {
 
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <StatCard label="Predicted Champion" value={call.champion} sub={`${call.championOdds}% to win`} accent="purple" />
-        <StatCard label="Host (USA)" value={`${call.usaOdds}%`} sub="ceiling: semifinals" accent="red" />
+        <StatCard label="Predicted Champion" value={call.champion} flag={call.champion} sub={`${call.championOdds}% to win`} accent="purple" />
+        <StatCard label="Host (USA)" value={`${call.usaOdds}%`} flag="United States" sub="ceiling: semifinals" accent="red" />
         <StatCard label="Brier Score" value={scorecard?.brier ?? '—'} sub="held-out WC 2022 (lower = better)" accent="turf" />
         <StatCard label="Edge vs Baseline" value={`+${scorecard?.baselineEdge ?? '—'}`} sub="pts over FIFA-rank (LOTO-CV)" accent="gold" />
       </div>
