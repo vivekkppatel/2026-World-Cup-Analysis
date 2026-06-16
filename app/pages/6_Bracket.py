@@ -172,24 +172,6 @@ st.subheader("🗺️ Knockout bracket")
 st.caption("Left: the model's expected path. Right: how it's actually playing out. "
            "Auto-refreshes every 60 seconds as results land.")
 
-# Model's headline call — the prediction explicitly revolves around this.
-champ = adv.iloc[0]
-usa = adv[adv["team"] == "United States"]
-if not usa.empty:
-    usa_row = usa.iloc[0]
-    st.markdown(f"""
-    <div style="background:linear-gradient(90deg,#1A1A2E,#14142B);border:1px solid #E0003C;
-                border-left:5px solid #E0003C;border-radius:10px;padding:.7rem 1rem;margin:.4rem 0;">
-      <span style="color:#E0003C;font-weight:800;letter-spacing:.04em">📌 MODEL CALL</span>
-      &nbsp;—&nbsp;<b style="color:#FAFAFA">{champ['team']}</b> are the predicted champions
-      (<b style="color:#9BE800">{champ['won_cup']*100:.1f}%</b>).
-      The host <b style="color:#FAFAFA">USA</b> is <b>not winning this</b>: a
-      <b style="color:#E8C547">{usa_row['won_cup']*100:.1f}%</b> title shot with a ceiling
-      around the <b>semifinals</b> ({usa_row['reached_sf']*100:.0f}% to reach them) — the
-      model has them eliminated before the final.
-    </div>
-    """, unsafe_allow_html=True)
-
 
 def _bracket_iframe(kind: str):
     svg = render_bracket_svg(kind)

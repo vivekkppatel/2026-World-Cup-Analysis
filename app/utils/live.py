@@ -45,8 +45,26 @@ def ensure_live_data(_bucket: int = 0) -> dict:
     return status
 
 
+def _results_mode() -> str:
+    """'simulated' if demo results are loaded, else 'live'."""
+    try:
+        import pandas as pd
+        from database.db import engine
+        df = pd.read_sql("SELECT value FROM app_meta WHERE key='results_mode'", engine)
+        return df["value"][0] if not df.empty else "live"
+    except Exception:
+        return "live"
+
+
 def live_banner() -> None:
-    """Render a compact 'auto-updating' status line with a manual refresh."""
+    """Render a compact status line — distinguishes live vs simulated demo data."""
+    mode = _results_mode()
+    if mode == "simulated":
+        st.caption("🟠 **Simulated results (demo)** — these scorelines are generated "
+                   "by the model so you can see the dashboard live, *not* real "
+                   "matches. Run `python scripts/simulate_results.py --clear` to remove.")
+        return
+
     status = ensure_live_data()
     cols = st.columns([4, 1])
     with cols[0]:
@@ -54,10 +72,10 @@ def live_banner() -> None:
             st.caption("⚪ Live feed unavailable right now — showing the latest "
                        "data in the database.")
         elif status["finished"] == 0:
-            st.caption("🟡 **Auto-updating every 5 min** · the open data feeds "
-                       "(openfootball / football-data.org) have no finished WC 2026 "
-                       "matches published yet — results appear here automatically "
-                       "the moment they do.")
+            st.caption("🟡 **Auto-updating every 5 min** · no real WC 2026 results are "
+                       "in the open feeds yet (the tournament's results aren't published "
+                       "to free sources). They appear automatically when available — or "
+                       "run `python scripts/simulate_results.py` for a live demo.")
         else:
             st.caption(f"🟢 **Live** · {status['finished']} of 104 matches in · "
                        "auto-updating every 5 minutes.")

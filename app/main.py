@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pandas as pd
 import streamlit as st
 
-from app.utils.intro import render_intro_gate
 from app.utils.theme import inject_theme
 
 st.set_page_config(
@@ -24,10 +23,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
-# Retro-Bowl intro: shoot the ball in to enter. Gate the whole dashboard.
-if not render_intro_gate():
-    st.stop()
 
 inject_theme()
 

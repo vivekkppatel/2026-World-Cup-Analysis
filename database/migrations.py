@@ -63,6 +63,17 @@ _UPGRADES = [
     "ALTER TABLE players ADD COLUMN IF NOT EXISTS fjelstul_id VARCHAR(20)",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_players_fjelstul ON players (fjelstul_id)",
 
+    # Small key/value store for app-wide flags (e.g. whether the results shown
+    # are 'live' from a real feed or 'simulated' for a demo — surfaced in the UI
+    # so a simulation never masquerades as real data).
+    """
+    CREATE TABLE IF NOT EXISTS app_meta (
+        key        VARCHAR(40) PRIMARY KEY,
+        value      VARCHAR(80),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+
     # Competition-weighted, recency-decayed recent form per team, pulled from
     # API-Football (scripts/refresh_form.py). elo_delta nudges the match
     # predictor's expected goals; the raw stats are kept for display.
