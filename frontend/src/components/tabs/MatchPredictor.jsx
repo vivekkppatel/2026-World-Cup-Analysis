@@ -63,9 +63,12 @@ function ScorelineHeatmap({ grid, homeTeam, awayTeam }) {
   const max = Math.max(...grid.flat())
   return (
     <div className="inline-block">
-      <div className="mb-1 text-center text-[10px] font-bold uppercase tracking-widest text-turf-600">{awayTeam} goals →</div>
+      <div className="mb-1 flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-turf-600">
+        <Flag team={awayTeam} w={16} /> {awayTeam} goals →
+      </div>
       <div className="flex">
-        <div className="mr-1 flex flex-col justify-center">
+        <div className="mr-1 flex flex-col items-center justify-center gap-1">
+          <Flag team={homeTeam} w={16} />
           <span className="rotate-180 text-[10px] font-bold uppercase tracking-widest text-turf-600" style={{ writingMode: 'vertical-rl' }}>
             {homeTeam} goals →
           </span>

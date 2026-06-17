@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Trophy, Target, TrendingUp, Crosshair } from 'lucide-react'
+import { Trophy, TrendingUp, Crosshair } from 'lucide-react'
 import { Card, StatCard, BarList, Flag } from '../ui.jsx'
 import { getChampionOdds, getScorecard, getTopScorers, getModelCall } from '../../data/api.js'
 
@@ -91,10 +91,6 @@ export default function Predictions() {
               })}
             </tbody>
           </table>
-          <p className="mt-3 text-xs text-turf-600/70">
-            <Target className="mr-1 inline h-3 w-3" />
-            <b>+/−</b> = goals minus xG — finishing above the model's expectation ("alpha").
-          </p>
         </Card>
       </div>
     </div>

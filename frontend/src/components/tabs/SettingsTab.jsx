@@ -1,4 +1,4 @@
-import { Settings, Database, Brain, Activity, Github } from 'lucide-react'
+import { Database, Brain, Activity, Github } from 'lucide-react'
 import { Card } from '../ui.jsx'
 
 const STACK = [
@@ -10,15 +10,6 @@ const STACK = [
 export default function SettingsTab() {
   return (
     <div className="space-y-5">
-      <Card title="About this platform" subtitle="World Cup 2026 Predictive Analyzer" icon={Settings}>
-        <p className="text-sm leading-relaxed text-turf-800">
-          An end-to-end analytics platform: a cleaned multi-tournament database, a leakage-free
-          match-prediction model, and a Monte Carlo bracket simulator — surfaced through this React
-          dashboard. The numbers shown mirror the real model output; wiring the live backend is a
-          one-file change (<code className="rounded bg-turf-100 px-1">src/data/api.js</code>).
-        </p>
-      </Card>
-
       <div className="grid gap-4 md:grid-cols-3">
         {STACK.map((s) => (
           <Card key={s.label} title={s.label} icon={s.icon}>
