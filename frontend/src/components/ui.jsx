@@ -1,18 +1,27 @@
 /** Small, reusable presentational components shared across tabs. */
 import { motion } from 'framer-motion'
-import { flagUrl } from '../data/flags.js'
+import { FLAG_ISO } from '../data/flags.js'
 
+// Flags come from the bundled `flag-icons` package (local assets, no external
+// CDN) — flagcdn.com images failed to load in some environments. Rendered as a
+// styled <span> with the `fi fi-<iso>` classes from flag-icons.
 export function Flag({ team, w = 22, className = '' }) {
-  const url = flagUrl(team, w * 2)
-  if (!url) return <span className={`inline-block ${className}`} style={{ width: w }} />
+  const iso = FLAG_ISO[team]
+  if (!iso) return <span className={`inline-block ${className}`} style={{ width: w }} />
   return (
-    <img
-      src={url}
-      alt={team}
-      width={w}
-      height={Math.round(w * 0.66)}
-      className={`inline-block rounded-[3px] object-cover align-[-3px] ring-1 ring-black/10 ${className}`}
-      loading="lazy"
+    <span
+      className={`fi fi-${iso} ${className}`}
+      title={team}
+      style={{
+        display: 'inline-block',
+        width: `${w}px`,
+        height: `${Math.round(w * 0.72)}px`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        borderRadius: '3px',
+        boxShadow: 'inset 0 0 0 1px rgba(0,0,0,.1)',
+        verticalAlign: '-3px',
+      }}
     />
   )
 }
