@@ -37,16 +37,15 @@ export default function Predictions() {
           <b className="font-display text-wc-purple">{call.champion}</b> are the predicted
           champions <span className="font-bold text-turf-600">({call.championOdds}%)</span>.
           {' '}The host <Flag team="United States" w={22} />{' '}
-          <b>United States</b> is <b className="text-wc-red">not winning this</b> — a{' '}
-          <b>{call.usaOdds}%</b> title shot with a ceiling at the{' '}
-          <b>{call.usaCeiling}</b>, eliminated before the final.
+          <b>United States</b> holds a <b>{call.usaOdds}%</b> title
+          probability, with a projected run to the <b>{call.usaCeiling}</b>.
         </p>
       </Card>
 
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard label="Predicted Champion" value={call.champion} flag={call.champion} sub={`${call.championOdds}% to win`} accent="purple" />
-        <StatCard label="Host (USA)" value={`${call.usaOdds}%`} flag="United States" sub="ceiling: semifinals" accent="red" />
+        <StatCard label="Host (USA)" value={`${call.usaOdds}%`} flag="United States" sub={`projected ${call.usaCeiling} run`} accent="red" />
         <StatCard label="Brier Score" value={scorecard?.brier ?? '—'} sub="held-out WC 2022 (lower = better)" accent="turf" />
         <StatCard label="Edge vs Baseline" value={`+${scorecard?.baselineEdge ?? '—'}`} sub="pts over FIFA-rank (LOTO-CV)" accent="gold" />
       </div>
