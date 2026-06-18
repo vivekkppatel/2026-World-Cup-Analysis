@@ -1,5 +1,6 @@
 # World Cup 2026 Analytics Platform
 Streamlit Platform: https://2026-world-cup-analysis-bxfezsmjakyc6muds347v3.streamlit.app/
+
 A real-time player performance and match analytics dashboard built during the 2026 FIFA World Cup. Combines live match data with historical StatsBomb event data to surface insights on team tactics, player contribution, and match predictions.
 
 ## Features
