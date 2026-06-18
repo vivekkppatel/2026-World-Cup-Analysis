@@ -22,6 +22,11 @@ jobs:
       - name: Install dependencies
         run: pip install pandas numpy scikit-learn joblib sqlalchemy psycopg2-binary python-dotenv requests tqdm scipy
 
+      - name: Fetch live results
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_POOLER_URL }}
+        run: python scripts/refresh_live.py
+
       - name: Run match predictions
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_POOLER_URL }}
