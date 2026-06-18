@@ -28,9 +28,11 @@ export default function SettingsTab() {
             run automatically every day via GitHub Actions and write fresh results to the database.
           </p>
           <p>
-            Match results: the free open-data feeds (openfootball, football-data.org) publish
-            scores as matches finish — standings, scorers, and the bracket scorecard will update
-            automatically once games are played.
+            <span className="font-semibold text-turf-900">Group stage is underway.</span>{' '}
+            Results in as of June 17: Argentina 3–0 Algeria, Austria 3–1 Jordan, Colombia 3–1 Uzbekistan,
+            England 4–2 Croatia, Ghana 1–0 Panama, Portugal 1–1 DR Congo, and more.
+            Standings, scorers, and the bracket scorecard update automatically as the open-data feeds
+            (openfootball, football-data.org) publish each result.
           </p>
         </div>
       </Card>

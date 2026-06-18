@@ -198,9 +198,9 @@ export default function MatchPredictor() {
             </p>
           </Card>
 
-          {/* Competition-weighted recent form (API-Football enrichment) */}
-          <Card title="Current form" subtitle="Last 20 matches · competition-weighted, recency-decayed" icon={Activity} accent="gold">
-            {pred.form?.applied ? (
+          {/* Competition-weighted recent form */}
+          {pred.form?.applied && (
+            <Card title="Current form" subtitle="Last 20 matches · competition-weighted, recency-decayed" icon={Activity} accent="gold">
               <div className="grid gap-3 sm:grid-cols-2">
                 {[{ t: home, f: pred.form.home }, { t: away, f: pred.form.away }].map(({ t, f }) => (
                   <div key={t} className="flex items-center justify-between rounded-xl bg-turf-50 px-4 py-3">
@@ -218,16 +218,8 @@ export default function MatchPredictor() {
                   </div>
                 ))}
               </div>
-            ) : (
-              <p className="text-sm text-turf-700">
-                Recent-form enrichment is <b>off</b>. Add an{' '}
-                <a href="https://www.api-football.com/" className="text-wc-purple underline" target="_blank" rel="noreferrer">API-Football</a>{' '}
-                key to <code className="rounded bg-turf-100 px-1">.env</code> and run{' '}
-                <code className="rounded bg-turf-100 px-1">python scripts/refresh_form.py</code> —
-                the predictor will then fold each team's competition-weighted recent form into its strength.
-              </p>
-            )}
-          </Card>
+            </Card>
+          )}
         </>
       )}
       {loading && <Card title="Computing…"><div className="h-24 animate-pulse rounded-xl bg-turf-100" /></Card>}
