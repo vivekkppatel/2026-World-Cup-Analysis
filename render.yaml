@@ -35,7 +35,7 @@ services:
         fromService:
           name: wc2026-api
           type: web
-          property: hostport   # → the API's public URL, injected at build
+          property: url
     routes:
       - type: rewrite          # SPA: serve index.html for any path
         source: /*
