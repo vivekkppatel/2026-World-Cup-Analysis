@@ -95,10 +95,7 @@ except Exception as e:
     st.stop()
 
 if adv.empty:
-    st.warning(
-        "No simulation results yet. Run the bracket simulation first:\n\n"
-        "```\npython scripts/run_bracket_sim.py --sims 10000\n```"
-    )
+    st.error("Bracket simulation data not found. The pipeline runs daily — check back shortly.")
     st.stop()
 
 model_version = adv["model_version"].iloc[0] if "model_version" in adv else "—"

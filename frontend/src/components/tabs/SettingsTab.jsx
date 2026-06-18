@@ -19,12 +19,20 @@ export default function SettingsTab() {
       </div>
 
       <Card title="Live data status" icon={Activity} accent="gold">
-        <p className="text-sm leading-relaxed text-turf-800">
-          The app is built to auto-update as matches finish. The free open-data feeds
-          (openfootball, football-data.org) currently publish <b>0 finished WC 2026 matches</b> —
-          there are no live results to show <i>yet</i>. The moment those feeds populate, the
-          standings, scorers, and bracket update on their own.
-        </p>
+        <div className="space-y-2 text-sm leading-relaxed text-turf-800">
+          <p>
+            <span className="inline-flex items-center gap-1.5 font-semibold text-green-700">
+              <span className="h-2 w-2 rounded-full bg-green-500 inline-block" /> ML pipeline live
+            </span>
+            {' '}— logistic regression predictions &amp; 10,000-run Monte Carlo bracket simulation
+            run automatically every day via GitHub Actions and write fresh results to the database.
+          </p>
+          <p>
+            Match results: the free open-data feeds (openfootball, football-data.org) publish
+            scores as matches finish — standings, scorers, and the bracket scorecard will update
+            automatically once games are played.
+          </p>
+        </div>
       </Card>
 
       <div className="flex items-center gap-2 text-xs text-turf-600/70">

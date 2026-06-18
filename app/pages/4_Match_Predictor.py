@@ -70,7 +70,7 @@ def load_team_meta() -> pd.DataFrame:
 
 predictor = load_predictor()
 if predictor is None:
-    st.warning("⚠️ Model not trained. Run `python scripts/train_model.py` first.")
+    st.error("⚠️ Model file not found. Contact the app maintainer.")
     st.stop()
 
 try:
