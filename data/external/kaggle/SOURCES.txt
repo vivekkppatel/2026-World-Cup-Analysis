@@ -1,0 +1,8 @@
+Kaggle community datasets — re-fetched from source, not redistributed.
+
+1. FIFA World Cup Complete Dataset 1930-2026
+   https://www.kaggle.com/datasets/kulkarniparth09/fifa-world-cup-complete-dataset-19302026
+2. Road to 2026 World Cup Squad Prediction
+   https://www.kaggle.com/datasets/ardaciftci/road-to-2026-world-cup-squad-prediction
+
+License terms are those stated on each dataset's Kaggle page.
