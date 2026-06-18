@@ -1,0 +1,33 @@
+name: Run ML Model
+
+on:
+  schedule:
+    # Runs daily at 6 AM UTC (2 AM ET) — after overnight match results
+    - cron: "0 6 * * *"
+  workflow_dispatch: # also lets you trigger it manually from GitHub
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install pandas numpy scikit-learn joblib sqlalchemy psycopg2-binary python-dotenv requests tqdm scipy
+
+      - name: Run match predictions
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_POOLER_URL }}
+        run: python scripts/predict_wc2026.py
+
+      - name: Run bracket simulation
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_POOLER_URL }}
+        run: python scripts/run_bracket_sim.py --sims 10000
