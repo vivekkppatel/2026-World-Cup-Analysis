@@ -96,7 +96,12 @@ class TestBracketResolution:
             matches={73: ("LAST_32", None, "1A"), 104: ("FINAL", "W73", "1B")},
             group_letters=["A", "B"],
         )
-        result = TournamentSimulator(groups, structure).run(10, seed=7)
+        sim = TournamentSimulator(groups, structure)
+        one_run = sim.run_once(np.random.default_rng(7))
+        assert 73 not in one_run["slots"]
+        assert 104 not in one_run["slots"]
+
+        result = sim.run(10, seed=7)
         table = result.advancement_table()
         assert isinstance(table, list)
         assert table
