@@ -97,4 +97,7 @@ class TestBracketResolution:
             group_letters=["A", "B"],
         )
         result = TournamentSimulator(groups, structure).run(10, seed=7)
-        assert isinstance(result.advancement_table(), list)
+        table = result.advancement_table()
+        assert isinstance(table, list)
+        assert table
+        assert {"A1", "A2", "A3", "B1", "B2", "B3"}.issubset({r["team"] for r in table})
