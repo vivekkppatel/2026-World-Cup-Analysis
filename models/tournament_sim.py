@@ -239,10 +239,12 @@ class TournamentSimulator:
         return [t["name"] for t in thirds[:8]]
 
     @staticmethod
-    def _resolve(placeholder: str, resolved: dict[str, str],
+    def _resolve(placeholder: str | None, resolved: dict[str, str],
                  winners: dict[int, str], losers: dict[int, str],
                  third_iter) -> str | None:
         """Turn a slot placeholder into a concrete team name, if known yet."""
+        if not placeholder:
+            return None
         if placeholder in resolved:
             return resolved[placeholder]
         if _GROUP_SLOT.match(placeholder):
