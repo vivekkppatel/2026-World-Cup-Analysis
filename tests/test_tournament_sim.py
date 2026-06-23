@@ -87,7 +87,7 @@ class TestBracketResolution:
         total = sum(r["won_cup"] for r in result.advancement_table())
         assert total == pytest.approx(1.0, abs=1e-9)
 
-    def test_none_placeholder_does_not_crash(self):
+    def test_null_placeholder_does_not_crash(self):
         groups = {
             "A": [GroupTeam("A1", 1800), GroupTeam("A2", 1500), GroupTeam("A3", 1450)],
             "B": [GroupTeam("B1", 1700), GroupTeam("B2", 1400), GroupTeam("B3", 1350)],
