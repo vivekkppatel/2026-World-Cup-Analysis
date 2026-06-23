@@ -86,3 +86,31 @@ class TestBracketResolution:
         result = TournamentSimulator(groups, structure).run(300, seed=5)
         total = sum(r["won_cup"] for r in result.advancement_table())
         assert total == pytest.approx(1.0, abs=1e-9)
+
+    def test_handles_null_placeholder(self):
+        groups = {
+            "A": [GroupTeam("A1", 1800), GroupTeam("A2", 1500), GroupTeam("A3", 1450)],
+            "B": [GroupTeam("B1", 1700), GroupTeam("B2", 1400), GroupTeam("B3", 1350)],
+        }
+        structure = BracketStructure(
+            matches={
+                73: ("LAST_32", None, "1A"),
+                74: ("LAST_32", "1A", "1B"),
+                75: ("LAST_32", "1A", None),
+                76: ("LAST_32", None, None),
+                104: ("FINAL", "W74", "1B"),
+            },
+            group_letters=["A", "B"],
+        )
+        sim = TournamentSimulator(groups, structure)
+        one_run = sim.run_once(np.random.default_rng(7))
+        assert 73 not in one_run["slots"]
+        assert 75 not in one_run["slots"]
+        assert 76 not in one_run["slots"]
+        assert 74 in one_run["slots"]
+
+        result = sim.run(10, seed=7)
+        table = result.advancement_table()
+        assert isinstance(table, list)
+        assert table
+        assert {"A1", "A2", "A3", "B1", "B2", "B3"}.issubset({r["team"] for r in table})
