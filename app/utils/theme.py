@@ -29,6 +29,8 @@ _NAV_ITEMS = [
     ("🔮 Match Predictor", "ML win probabilities"),
     ("💰 Player Valuation", "CPCS · undervalued XI"),
     ("🏆 Bracket", "Predicted vs reality · KPIs"),
+    ("📊 Regression Analysis", "Coefficients · calibration · CV"),
+    ("🎲 Monte Carlo", "Live tournament simulation"),
 ]
 
 

@@ -134,7 +134,8 @@ def team_stats():
 @app.get("/api/top-scorers")
 def top_scorers(tournament: str = "WC 2022", limit: int = 5):
     return _rows("""
-        SELECT player, team, goals, ROUND(xg, 1) AS xg
+        SELECT player, team, goals, COALESCE(assists, 0) AS assists,
+               ROUND(xg, 1) AS xg
         FROM v_top_scorers WHERE tournament_label = :t
         ORDER BY goals DESC, xg DESC LIMIT :lim
     """, {"t": tournament, "lim": limit})
@@ -245,3 +246,349 @@ def match_predict(home: str, away: str, knockout: bool = False):
         "home": fh or None, "away": fa or None,
         "applied": bool(forms),  # True once refresh_form has run with a key
     }}
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Tournament Overview — match results (standings/fixtures/top-scorers above)
+# ════════════════════════════════════════════════════════════════════════════
+@app.get("/api/results")
+def results(tournament: str = "WC 2026", limit: int = 24):
+    """Finished match results for a tournament, most recent first."""
+    return _rows("""
+        SELECT fifa_match_num,
+               to_char(kickoff_utc, 'Mon DD') AS date,
+               stage, group_name, home_team, away_team, home_score, away_score
+        FROM v_match_results
+        WHERE tournament_label = :t
+        ORDER BY kickoff_utc DESC
+        LIMIT :lim
+    """, {"t": tournament, "lim": limit})
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Team Analysis — per-match event-level stats across tournaments
+# ════════════════════════════════════════════════════════════════════════════
+@app.get("/api/ta/tournaments")
+def ta_tournaments():
+    return [r["tournament_label"] for r in _rows("""
+        SELECT tournament_label, MIN(kickoff_utc) AS k
+        FROM v_team_match_stats GROUP BY tournament_label ORDER BY k DESC
+    """)]
+
+
+@app.get("/api/ta/teams")
+def ta_teams(tournament: str):
+    return [r["team"] for r in _rows("""
+        SELECT DISTINCT team FROM v_team_match_stats
+        WHERE tournament_label = :t ORDER BY team
+    """, {"t": tournament})]
+
+
+@app.get("/api/ta")
+def team_analysis(tournament: str, team: str):
+    """Match-by-match event stats for one team in one tournament."""
+    return _rows("""
+        SELECT to_char(kickoff_utc, 'Mon DD') AS date, stage, opponent,
+               goals_scored, goals_conceded, team_xg AS xg,
+               shots, passes, pressures
+        FROM v_team_match_stats
+        WHERE tournament_label = :t AND team = :team
+        ORDER BY kickoff_utc
+    """, {"t": tournament, "team": team})
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Player Stats — per-90 leaderboards
+# ════════════════════════════════════════════════════════════════════════════
+@app.get("/api/ps/tournaments")
+def ps_tournaments():
+    return [r["tournament_label"] for r in _rows("""
+        SELECT tournament_label, MIN(tournament_year) AS y
+        FROM v_player_stats WHERE minutes > 0
+        GROUP BY tournament_label ORDER BY y DESC
+    """)]
+
+
+@app.get("/api/ps")
+def player_stats(tournament: str, min_minutes: int = 180, position: str = "All"):
+    rows = _rows("""
+        SELECT player, position, team, matches_played, minutes,
+               goals, assists, xg, shots, key_passes, pressures, tackles,
+               goals_p90, assists_p90, xg_p90, shots_p90,
+               key_passes_p90, pressures_p90
+        FROM v_player_stats
+        WHERE tournament_label = :t AND minutes >= :mm
+    """, {"t": tournament, "mm": min_minutes})
+    if position and position != "All":
+        rows = [r for r in rows if r.get("position") == position]
+    return rows
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Player Valuation — Composite Player Contribution Score (CPCS)
+# ════════════════════════════════════════════════════════════════════════════
+@lru_cache(maxsize=16)
+def _cpcs_payload(tournament: str, min_minutes: int) -> dict:
+    """Compute CPCS leaderboard + undervalued cohort from the v_player_stats
+    view (no slow StatsBomb cold-download). Cached per (tournament, minutes)."""
+    from models.player_rating import compute_player_ratings, get_undervalued_players
+
+    df = pd.read_sql("""
+        SELECT player AS player_name, position, team AS team_name,
+               matches_played, minutes AS minutes_played,
+               goals, assists, xg, shots, key_passes, pressures, tackles,
+               goals_p90, assists_p90, xg_p90, shots_p90,
+               key_passes_p90, pressures_p90
+        FROM v_player_stats
+        WHERE tournament_label = %(t)s AND minutes > 0
+    """, engine, params={"t": tournament})
+    if df.empty:
+        return {"leaderboard": [], "undervalued": []}
+
+    rated = compute_player_ratings(df, min_minutes=min_minutes)
+    if rated.empty:
+        return {"leaderboard": [], "undervalued": []}
+
+    def _row(r) -> dict:
+        return {
+            "player": r["player_name"], "team": r["team_name"],
+            "positionGroup": r.get("position_group", "MID"),
+            "minutes": int(r["minutes_played"]),
+            "cpcs": round(float(r["cpcs"]), 1),
+            "goals_p90": round(float(r.get("goals_p90") or 0), 2),
+            "assists_p90": round(float(r.get("assists_p90") or 0), 2),
+            "xg_p90": round(float(r.get("xg_p90") or 0), 2),
+            "shots_p90": round(float(r.get("shots_p90") or 0), 2),
+            "key_passes_p90": round(float(r.get("key_passes_p90") or 0), 2),
+            "pressures_p90": round(float(r.get("pressures_p90") or 0), 2),
+        }
+
+    leaderboard = [_row(r) for _, r in rated.head(40).iterrows()]
+    uv = get_undervalued_players(rated, top_n=12)
+    undervalued = []
+    for _, r in uv.iterrows():
+        d = _row(r)
+        d["efficiency"] = round(float(r.get("efficiency_ratio") or 0), 2)
+        undervalued.append(d)
+    return {"leaderboard": leaderboard, "undervalued": undervalued}
+
+
+@app.get("/api/pv/tournaments")
+def pv_tournaments():
+    return ps_tournaments()
+
+
+@app.get("/api/pv")
+def player_valuation(tournament: str, min_minutes: int = 90):
+    return _cpcs_payload(tournament, min_minutes)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Monte Carlo — advancement distribution + model scorecard
+# ════════════════════════════════════════════════════════════════════════════
+_KO_STAGE_ORDER = ["LAST_32", "LAST_16", "QUARTER_FINALS",
+                   "SEMI_FINALS", "THIRD_PLACE", "FINAL"]
+_STAGE_LABEL = {"LAST_32": "Round of 32", "LAST_16": "Round of 16",
+                "QUARTER_FINALS": "Quarter-finals", "SEMI_FINALS": "Semi-finals",
+                "THIRD_PLACE": "Third place", "FINAL": "Final"}
+_N_SIMS = 10000  # matches scripts/run_bracket_sim.py --sims default
+
+
+@app.get("/api/monte-carlo")
+def monte_carlo():
+    """The 10k-run Monte Carlo output: advancement probabilities per team,
+    plus the live model scorecard. Read straight from the stored sim tables."""
+    adv = _rows("""
+        SELECT team, group_name AS "group", fifa_rank AS "fifaRank",
+               ROUND(strength)::int AS strength,
+               ROUND(reached_r32*100, 1)   AS r32,
+               ROUND(reached_r16*100, 1)   AS r16,
+               ROUND(reached_qf*100, 1)    AS qf,
+               ROUND(reached_sf*100, 1)    AS sf,
+               ROUND(reached_final*100, 1) AS final,
+               ROUND(won_cup*100, 1)       AS champion,
+               model_version AS "modelVersion"
+        FROM v_bracket_predictions
+        ORDER BY won_cup DESC
+    """)
+
+    sc = _rows("""
+        SELECT stage, hit, brier, predicted_confidence AS conf
+        FROM v_model_scorecard
+    """)
+    scorecard = {"scored": len(sc), "hitRate": None, "brier": None,
+                 "avgConf": None, "byStage": []}
+    if sc:
+        scorecard["hitRate"] = round(sum(r["hit"] for r in sc) / len(sc) * 100, 1)
+        scorecard["brier"] = round(sum(r["brier"] for r in sc) / len(sc), 3)
+        scorecard["avgConf"] = round(sum(r["conf"] for r in sc) / len(sc) * 100, 1)
+        for stage in _KO_STAGE_ORDER:
+            grp = [r for r in sc if r["stage"] == stage]
+            if grp:
+                scorecard["byStage"].append({
+                    "round": _STAGE_LABEL[stage], "matches": len(grp),
+                    "hitRate": round(sum(r["hit"] for r in grp) / len(grp) * 100, 1),
+                    "brier": round(sum(r["brier"] for r in grp) / len(grp), 3),
+                })
+
+    model_version = adv[0]["modelVersion"] if adv else None
+    return {"advancement": adv, "scorecard": scorecard,
+            "nSims": _N_SIMS, "modelVersion": model_version,
+            "champion": adv[0]["team"] if adv else None}
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Regression Analysis — coefficients, calibration, cross-validation
+# ════════════════════════════════════════════════════════════════════════════
+_REG_ALL = ["WC 2018", "EURO 2020", "WC 2022", "AFCON 2023", "COPA 2024", "EURO 2024"]
+_REG_TRAIN = ["WC 2018", "EURO 2020"]
+_REG_TEST = ["WC 2022"]
+_REG_CLASS_LABELS = ["HOME_WIN", "DRAW", "AWAY_WIN"]
+
+_REG_MATCH_SQL = """
+    SELECT m.kickoff_utc, m.stage, m.winner, m.tournament_label,
+           th.name AS home_team, ta.name AS away_team,
+           m.home_score, m.away_score,
+           xh.team_xg AS team_xg_home, xa.team_xg AS team_xg_away
+    FROM matches m
+    JOIN teams th ON th.id = m.home_team_id
+    JOIN teams ta ON ta.id = m.away_team_id
+    LEFT JOIN (SELECT match_id, team_id, SUM(xg) AS team_xg
+               FROM player_match_stats GROUP BY match_id, team_id) xh
+           ON xh.match_id = m.id AND xh.team_id = m.home_team_id
+    LEFT JOIN (SELECT match_id, team_id, SUM(xg) AS team_xg
+               FROM player_match_stats GROUP BY match_id, team_id) xa
+           ON xa.match_id = m.id AND xa.team_id = m.away_team_id
+    WHERE m.tournament_label = ANY(%(labels)s)
+      AND m.status = 'FINISHED' AND m.winner IS NOT NULL
+    ORDER BY m.kickoff_utc
+"""
+
+
+@lru_cache(maxsize=1)
+def _regression_payload() -> dict:
+    """Train the leakage-free LogReg with a strict temporal split and return a
+    full statistical report (coefficients, odds ratios, calibration, LOTO-CV,
+    confusion matrix, feature correlations). Cached once per process."""
+    import numpy as np
+    from pathlib import Path as _Path
+    from sklearn.metrics import confusion_matrix, classification_report
+    from data.transform.team_aliases import canonicalize
+    from models.elo import build_from_history
+    from models.features import build_match_features, FEATURE_COLUMNS
+    from models.match_predictor import MatchPredictor, MODEL_VERSION
+
+    fjelstul = _Path(__file__).parent.parent / "data" / "external" / "fjelstul" / "matches.csv"
+    matches = pd.read_sql(_REG_MATCH_SQL, engine, params={"labels": _REG_ALL})
+    if matches.empty:
+        return {"available": False}
+
+    with engine.connect() as conn:
+        fifa_ranks = {n: r for n, r in conn.execute(text(
+            "SELECT name, fifa_ranking FROM teams WHERE fifa_ranking IS NOT NULL"
+        )).fetchall()}
+
+    history = pd.read_csv(fjelstul)
+    history["home_team_name"] = history["home_team_name"].map(canonicalize)
+    history["away_team_name"] = history["away_team_name"].map(canonicalize)
+    elo = build_from_history(history)
+
+    X_all, y_all, meta = build_match_features(matches, elo, fifa_ranks)
+    tour = meta["tournament_label"]
+    tr, te = tour.isin(_REG_TRAIN), tour.isin(_REG_TEST)
+    X_train, y_train, X_test, y_test = X_all[tr], y_all[tr], X_all[te], y_all[te]
+
+    model = MatchPredictor()
+    model.train(X_train, y_train)
+    metrics = model.evaluate(X_test, y_test)
+    baseline = MatchPredictor.baseline_accuracy(X_test, y_test)
+
+    clf = model.pipeline.named_steps["clf"]
+    idx_to_label = {0: "HOME_WIN", 1: "DRAW", 2: "AWAY_WIN"}
+    classes = [idx_to_label[c] for c in clf.classes_]
+    coef = clf.coef_.tolist()
+    odds = np.exp(clf.coef_).round(4).tolist()
+    importance = np.abs(clf.coef_).mean(axis=0)
+    importance_rows = sorted(
+        [{"feature": f, "value": round(float(v), 4)}
+         for f, v in zip(FEATURE_COLUMNS, importance)],
+        key=lambda d: d["value"], reverse=True)
+
+    X_test_f = X_test[FEATURE_COLUMNS].fillna(0.0)
+    proba = model.pipeline.predict_proba(X_test_f)
+    y_pred = model.pipeline.predict(X_test_f)
+    cm = confusion_matrix(y_test, y_pred, labels=[0, 1, 2]).tolist()
+    report = classification_report(y_test, y_pred, target_names=_REG_CLASS_LABELS,
+                                   output_dict=True, zero_division=0)
+    class_report = [{
+        "label": lbl, "precision": round(report[lbl]["precision"], 2),
+        "recall": round(report[lbl]["recall"], 2),
+        "f1": round(report[lbl]["f1-score"], 2),
+        "support": int(report[lbl]["support"]),
+    } for lbl in _REG_CLASS_LABELS]
+
+    # Calibration (top-prediction confidence vs hit rate)
+    top_conf = proba.max(axis=1)
+    top_pred = proba.argmax(axis=1)
+    y_arr = np.asarray(y_test)
+    hits = (top_pred == y_arr).astype(float)
+    calibration = []
+    edges = np.linspace(0.0, 1.0, 9)
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        mask = (top_conf >= lo) & (top_conf < (hi if hi < 1.0 else hi + 0.01))
+        if mask.sum():
+            calibration.append({"conf": round(float(top_conf[mask].mean()), 3),
+                                "hit": round(float(hits[mask].mean()), 3),
+                                "n": int(mask.sum())})
+
+    # Leave-one-tournament-out CV
+    loto = []
+    for held in _REG_ALL:
+        te_m = tour == held
+        tr_m = ~te_m
+        if te_m.sum() == 0 or tr_m.sum() == 0:
+            continue
+        m = MatchPredictor()
+        m.train(X_all[tr_m], y_all[tr_m])
+        ev = m.evaluate(X_all[te_m], y_all[te_m])
+        base = MatchPredictor.baseline_accuracy(X_all[te_m], y_all[te_m])
+        loto.append({"tournament": held, "matches": int(te_m.sum()),
+                     "accuracy": round(ev["accuracy"], 4),
+                     "baseline": round(base, 4),
+                     "edge": round(ev["accuracy"] - base, 4),
+                     "logLoss": round(ev["log_loss"], 3),
+                     "brier": round(ev["brier"], 3)})
+
+    corr = X_all[FEATURE_COLUMNS].corr().round(3).values.tolist()
+
+    return {
+        "available": True,
+        "modelVersion": MODEL_VERSION,
+        "features": list(FEATURE_COLUMNS),
+        "classes": classes,
+        "coefficients": coef,
+        "oddsRatios": odds,
+        "importance": importance_rows,
+        "confusion": {"labels": _REG_CLASS_LABELS, "matrix": cm},
+        "classReport": class_report,
+        "calibration": calibration,
+        "distribution": [[round(float(p), 4) for p in row] for row in proba.tolist()],
+        "loto": loto,
+        "correlation": {"features": list(FEATURE_COLUMNS), "matrix": corr},
+        "metrics": {
+            "accuracy": round(metrics["accuracy"], 4),
+            "logLoss": round(metrics["log_loss"], 3),
+            "brier": round(metrics["brier"], 3),
+            "baseline": round(baseline, 4),
+            "nTrain": int(tr.sum()), "nTest": int(te.sum()),
+            "trainTournaments": _REG_TRAIN, "testTournaments": _REG_TEST,
+        },
+    }
+
+
+@app.get("/api/regression")
+def regression():
+    try:
+        return _regression_payload()
+    except Exception as e:
+        return {"available": False, "error": str(e)}

@@ -229,10 +229,14 @@ PAGES = [
      "CPCS scoring — find undervalued players"),
     ("pages/6_Bracket.py", "🏆", "Bracket",
      "Predicted vs reality, with model KPIs"),
+    ("pages/7_Regression_Analysis.py", "📊", "Regression Analysis",
+     "Coefficients, calibration & cross-validation"),
+    ("pages/8_Monte_Carlo.py", "🎲", "Monte Carlo",
+     "Live 10k-run tournament simulation"),
 ]
 rows = [PAGES[:3], PAGES[3:]]
 for row in rows:
-    cols = st.columns(3)
+    cols = st.columns(len(row))
     for col, (path, icon, label, desc) in zip(cols, row):
         with col:
             st.page_link(path, label=f"{label} — {desc}", icon=icon,

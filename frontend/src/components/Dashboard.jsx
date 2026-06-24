@@ -3,24 +3,42 @@ import { motion } from 'framer-motion'
 import SideNav from './SideNav.jsx'
 import { Flag } from './ui.jsx'
 import Predictions from './tabs/Predictions.jsx'
+import Overview from './tabs/Overview.jsx'
 import MatchPredictor from './tabs/MatchPredictor.jsx'
 import TeamStats from './tabs/TeamStats.jsx'
+import TeamAnalysis from './tabs/TeamAnalysis.jsx'
+import PlayerStats from './tabs/PlayerStats.jsx'
+import PlayerValuation from './tabs/PlayerValuation.jsx'
 import BracketSim from './tabs/BracketSim.jsx'
+import MonteCarlo from './tabs/MonteCarlo.jsx'
+import Regression from './tabs/Regression.jsx'
 import SettingsTab from './tabs/SettingsTab.jsx'
 
 const TAB_COMPONENTS = {
   predictions: Predictions,
+  overview: Overview,
   match: MatchPredictor,
   teams: TeamStats,
+  teamAnalysis: TeamAnalysis,
+  players: PlayerStats,
+  valuation: PlayerValuation,
   bracket: BracketSim,
+  montecarlo: MonteCarlo,
+  regression: Regression,
   settings: SettingsTab,
 }
 
 const TAB_TITLES = {
   predictions: 'Predictions & Simulation',
+  overview: 'Tournament Overview',
   match: 'Match Predictor',
   teams: 'Team Statistics',
+  teamAnalysis: 'Team Analysis',
+  players: 'Player Statistics',
+  valuation: 'Player Valuation · CPCS',
   bracket: 'Bracket Simulator',
+  montecarlo: 'Monte Carlo Simulation',
+  regression: 'Regression Analysis',
   settings: 'Platform Info',
 }
 

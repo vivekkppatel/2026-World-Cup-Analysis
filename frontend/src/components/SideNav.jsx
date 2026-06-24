@@ -1,11 +1,20 @@
 import { motion } from 'framer-motion'
-import { Trophy, Swords, Shield, Network, Settings } from 'lucide-react'
+import {
+  Trophy, Globe, Swords, Shield, Activity, Users, Gem,
+  Network, Dices, Sigma, Settings,
+} from 'lucide-react'
 
 export const TABS = [
   { id: 'predictions', label: 'Predictions', icon: Trophy },
+  { id: 'overview', label: 'Tournament Overview', icon: Globe },
   { id: 'match', label: 'Match Predictor', icon: Swords },
   { id: 'teams', label: 'Team Stats', icon: Shield },
+  { id: 'teamAnalysis', label: 'Team Analysis', icon: Activity },
+  { id: 'players', label: 'Player Stats', icon: Users },
+  { id: 'valuation', label: 'Player Valuation', icon: Gem },
   { id: 'bracket', label: 'Bracket', icon: Network },
+  { id: 'montecarlo', label: 'Monte Carlo', icon: Dices },
+  { id: 'regression', label: 'Regression Analysis', icon: Sigma },
   { id: 'settings', label: 'Info', icon: Settings },
 ]
 
@@ -13,7 +22,7 @@ export const TABS = [
 export default function SideNav({ active, onChange }) {
   return (
     <nav className="fixed right-5 top-1/2 z-30 -translate-y-1/2">
-      <div className="flex flex-col items-center gap-2 rounded-full bg-turf-800/95 p-2 shadow-pill backdrop-blur">
+      <div className="flex max-h-[92vh] flex-col items-center gap-2 overflow-y-auto rounded-[28px] bg-turf-800/95 p-2 shadow-pill backdrop-blur [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {TABS.map((t) => {
           const Icon = t.icon
           const isActive = active === t.id
