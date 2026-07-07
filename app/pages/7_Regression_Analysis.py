@@ -196,11 +196,11 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-coef_table = coef_df.copy()
-coef_table.columns = [f"β_{c}" for c in coef_table.columns]
-or_table = odds_df.copy()
-or_table.columns = [f"OR_{c}" for c in or_table.columns]
-combined = pd.concat([coef_table.T, or_table.T], axis=1)
+# Features as rows, classes as columns. Prefix the class columns so β and OR
+# blocks stay unique (concat with identical column labels → pyarrow rejects it).
+coef_t = coef_df.T.rename(columns=lambda c: f"β · {c}")
+or_t = odds_df.T.rename(columns=lambda c: f"OR · {c}")
+combined = pd.concat([coef_t, or_t], axis=1)
 combined.index.name = "Feature"
 st.dataframe(combined.style.format("{:.3f}"), use_container_width=True)
 
