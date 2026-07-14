@@ -8,7 +8,9 @@ __pycache__/
 .env
 .git/
 .claude/
-data/external/
+# NOTE: data/external/ is intentionally NOT ignored — the API needs
+# data/external/fjelstul/matches.csv at runtime to build Elo history for the
+# /api/regression endpoint (and the bracket sim). Only raw dumps are excluded.
 data/raw/
 *.ipynb
 docs/

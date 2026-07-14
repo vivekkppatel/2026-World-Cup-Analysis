@@ -394,47 +394,60 @@ _STAGE_LABEL = {"LAST_32": "Round of 32", "LAST_16": "Round of 16",
 _N_SIMS = 10000  # matches scripts/run_bracket_sim.py --sims default
 
 
+def _avg(values, scale=1.0, nd=1):
+    """Mean of the non-null values, scaled and rounded; None if nothing to average."""
+    vals = [v for v in values if v is not None]
+    return round(sum(vals) / len(vals) * scale, nd) if vals else None
+
+
 @app.get("/api/monte-carlo")
 def monte_carlo():
     """The 10k-run Monte Carlo output: advancement probabilities per team,
-    plus the live model scorecard. Read straight from the stored sim tables."""
-    adv = _rows("""
-        SELECT team, group_name AS "group", fifa_rank AS "fifaRank",
-               ROUND(strength)::int AS strength,
-               ROUND(reached_r32*100, 1)   AS r32,
-               ROUND(reached_r16*100, 1)   AS r16,
-               ROUND(reached_qf*100, 1)    AS qf,
-               ROUND(reached_sf*100, 1)    AS sf,
-               ROUND(reached_final*100, 1) AS final,
-               ROUND(won_cup*100, 1)       AS champion,
-               model_version AS "modelVersion"
-        FROM v_bracket_predictions
-        ORDER BY won_cup DESC
-    """)
+    plus the live model scorecard. Read straight from the stored sim tables.
+    Errors are surfaced (not raised) so the frontend degrades gracefully."""
+    empty = {"advancement": [], "nSims": _N_SIMS, "modelVersion": None,
+             "champion": None, "scorecard": {"scored": 0, "hitRate": None,
+             "brier": None, "avgConf": None, "byStage": []}}
+    try:
+        adv = _rows("""
+            SELECT team, group_name AS "group", fifa_rank AS "fifaRank",
+                   ROUND(strength)::int AS strength,
+                   ROUND(reached_r32*100, 1)   AS r32,
+                   ROUND(reached_r16*100, 1)   AS r16,
+                   ROUND(reached_qf*100, 1)    AS qf,
+                   ROUND(reached_sf*100, 1)    AS sf,
+                   ROUND(reached_final*100, 1) AS final,
+                   ROUND(won_cup*100, 1)       AS champion,
+                   model_version AS "modelVersion"
+            FROM v_bracket_predictions
+            ORDER BY won_cup DESC
+        """)
 
-    sc = _rows("""
-        SELECT stage, hit, brier, predicted_confidence AS conf
-        FROM v_model_scorecard
-    """)
-    scorecard = {"scored": len(sc), "hitRate": None, "brier": None,
-                 "avgConf": None, "byStage": []}
-    if sc:
-        scorecard["hitRate"] = round(sum(r["hit"] for r in sc) / len(sc) * 100, 1)
-        scorecard["brier"] = round(sum(r["brier"] for r in sc) / len(sc), 3)
-        scorecard["avgConf"] = round(sum(r["conf"] for r in sc) / len(sc) * 100, 1)
+        sc = _rows("""
+            SELECT stage, hit, brier, predicted_confidence AS conf
+            FROM v_model_scorecard
+        """)
+        scorecard = {
+            "scored": len(sc),
+            "hitRate": _avg([r["hit"] for r in sc], 100.0, 1),
+            "brier": _avg([r["brier"] for r in sc], 1.0, 3),
+            "avgConf": _avg([r["conf"] for r in sc], 100.0, 1),
+            "byStage": [],
+        }
         for stage in _KO_STAGE_ORDER:
             grp = [r for r in sc if r["stage"] == stage]
             if grp:
                 scorecard["byStage"].append({
                     "round": _STAGE_LABEL[stage], "matches": len(grp),
-                    "hitRate": round(sum(r["hit"] for r in grp) / len(grp) * 100, 1),
-                    "brier": round(sum(r["brier"] for r in grp) / len(grp), 3),
+                    "hitRate": _avg([r["hit"] for r in grp], 100.0, 1),
+                    "brier": _avg([r["brier"] for r in grp], 1.0, 3),
                 })
 
-    model_version = adv[0]["modelVersion"] if adv else None
-    return {"advancement": adv, "scorecard": scorecard,
-            "nSims": _N_SIMS, "modelVersion": model_version,
-            "champion": adv[0]["team"] if adv else None}
+        return {"advancement": adv, "scorecard": scorecard, "nSims": _N_SIMS,
+                "modelVersion": adv[0]["modelVersion"] if adv else None,
+                "champion": adv[0]["team"] if adv else None}
+    except Exception as e:
+        return {**empty, "error": str(e)}
 
 
 # ════════════════════════════════════════════════════════════════════════════
