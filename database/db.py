@@ -5,7 +5,9 @@ SQLAlchemy engine, session factory, and helper utilities.
 All other modules import `get_session` and `engine` from here.
 """
 import os
+import re
 from contextlib import contextmanager
+from urllib.parse import urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
@@ -14,6 +16,43 @@ from sqlalchemy.orm import sessionmaker, DeclarativeBase
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/worldcup2026")
+
+# A Supabase *direct* connection host looks like db.<project-ref>.supabase.co
+_SUPABASE_DIRECT = re.compile(r"^db\.([a-z0-9]+)\.supabase\.co$", re.IGNORECASE)
+
+
+def _use_supabase_pooler(url: str) -> str:
+    """
+    Rewrite a Supabase *direct* connection URL to the IPv4 session pooler.
+
+    Supabase direct hosts (db.<ref>.supabase.co) are IPv6-only. Any host
+    without IPv6 egress — notably Render's free tier — fails with
+    "Network is unreachable". The session pooler is reachable over IPv4, so we
+    transparently swap to it: host → <region>.pooler.supabase.com and username
+    → postgres.<ref> (the tenant-qualified form the pooler requires). The
+    password, port, path and query are preserved verbatim.
+
+    No-op for any non-direct host, so local dev and a URL that already points
+    at the pooler are left untouched. Region defaults to this project's
+    (aws-1-us-east-1); override with SUPABASE_POOLER_REGION if it ever moves.
+    """
+    parts = urlsplit(url)
+    match = _SUPABASE_DIRECT.match(parts.hostname or "")
+    if not match:
+        return url
+    ref = match.group(1)
+    region = os.getenv("SUPABASE_POOLER_REGION", "aws-1-us-east-1")
+    pooler_host = f"{region}.pooler.supabase.com"
+
+    # Split the raw netloc so the (percent-encoded) password is preserved as-is.
+    userinfo, _, _hostport = parts.netloc.rpartition("@")
+    user, sep, pw = userinfo.partition(":")
+    if user == "postgres":                      # pooler needs postgres.<ref>
+        user = f"postgres.{ref}"
+    new_userinfo = f"{user}{sep}{pw}"
+    port = f":{parts.port}" if parts.port else ""
+    new_netloc = f"{new_userinfo}@{pooler_host}{port}"
+    return urlunsplit((parts.scheme, new_netloc, parts.path, parts.query, parts.fragment))
 
 
 def _require_ssl(url: str) -> str:
@@ -28,7 +67,7 @@ def _require_ssl(url: str) -> str:
     return f"{url}{sep}sslmode=require"
 
 
-DATABASE_URL = _require_ssl(DATABASE_URL)
+DATABASE_URL = _require_ssl(_use_supabase_pooler(DATABASE_URL))
 
 # ── Engine ────────────────────────────────────────────────────────────────────
 engine = create_engine(
