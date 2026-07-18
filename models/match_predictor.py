@@ -145,10 +145,17 @@ class MatchPredictor:
     # ── Prediction ────────────────────────────────────────────────────────────
 
     def predict_one(self, features: dict) -> dict[str, float]:
-        """Predict {HOME_WIN, DRAW, AWAY_WIN} for one pre-built feature dict."""
+        """Predict {HOME_WIN, DRAW, AWAY_WIN} for one pre-built feature dict.
+
+        Missing keys AND present-but-NaN/None values both fall back to 0.0 — the
+        same neutral value features.py uses when a team has no history (e.g. a
+        WC 2026 side with no event data yet). Without this, a NaN would make
+        LogisticRegression reject the whole input.
+        """
         if not self.is_trained:
             raise RuntimeError("Model not trained. Run .train() or .load() first.")
         X = pd.DataFrame([{c: features.get(c, 0.0) for c in self.feature_names}])
+        X = X.apply(pd.to_numeric, errors="coerce").fillna(0.0)
         proba = self.pipeline.predict_proba(X)[0]
         classes = list(self.pipeline.named_steps["clf"].classes_)
         # Map model class index → label name via LABEL_MAP ordering

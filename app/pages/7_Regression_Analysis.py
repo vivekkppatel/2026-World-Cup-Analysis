@@ -467,6 +467,12 @@ try:
     team_meta = pd.read_sql(team_feats_sql, engine)
     tm = {r["team"]: r for _, r in team_meta.iterrows()}
 
+    # NaN-safe: WC 2026 sides have no event-level form yet, so form_goals/avg_xg
+    # come back NULL → NaN. `x or default` does NOT catch NaN (it's truthy), so
+    # coerce explicitly to the neutral 0.0 the model was trained with.
+    def _num(v, default=0.0):
+        return default if v is None or pd.isna(v) else float(v)
+
     pred_rows = []
     for _, fx in wc26.iterrows():
         h, a = tm.get(fx["home_team"]), tm.get(fx["away_team"])
@@ -475,9 +481,9 @@ try:
         elo_h, elo_a = elo.rating(fx["home_team"]), elo.rating(fx["away_team"])
         features = {
             "elo_diff": elo_h - elo_a,
-            "fifa_rank_gap": float((h.get("fifa_ranking") or 50) - (a.get("fifa_ranking") or 50)) * -1,
-            "form_goals_diff": float(h.get("form_goals") or 0) - float(a.get("form_goals") or 0),
-            "form_xg_diff": float(h.get("avg_xg") or 1.3) - float(a.get("avg_xg") or 1.3),
+            "fifa_rank_gap": (_num(h.get("fifa_ranking"), 50) - _num(a.get("fifa_ranking"), 50)) * -1,
+            "form_goals_diff": _num(h.get("form_goals")) - _num(a.get("form_goals")),
+            "form_xg_diff": _num(h.get("avg_xg")) - _num(a.get("avg_xg")),
             "rest_days_diff": 0.0,
             "is_knockout": 0,
         }
